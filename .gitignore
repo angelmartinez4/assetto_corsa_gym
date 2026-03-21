@@ -2,6 +2,7 @@
 results
 data/data_sets
 archive
+models
 *.ptorch
 *.pkl?
 .idea/
