@@ -42,12 +42,12 @@ class BaseNetwork(nn.Module):
 
 class StateActionFunction(BaseNetwork):
 
-    def __init__(self, state_dim, action_dim, hidden_units=[256, 256]):
+    def __init__(self, state_dim, action_dim, hidden_units=[256, 256], output_dim=1):
         super().__init__()
 
         self.net = create_linear_network(
             input_dim=state_dim+action_dim,
-            output_dim=1,
+            output_dim=output_dim,
             hidden_units=hidden_units)
 
     def forward(self, x):
@@ -56,11 +56,11 @@ class StateActionFunction(BaseNetwork):
 
 class TwinnedStateActionFunction(BaseNetwork):
 
-    def __init__(self, state_dim, action_dim, hidden_units=[256, 256]):
+    def __init__(self, state_dim, action_dim, hidden_units=[256, 256], output_dim=1):
         super().__init__()
 
-        self.net1 = StateActionFunction(state_dim, action_dim, hidden_units)
-        self.net2 = StateActionFunction(state_dim, action_dim, hidden_units)
+        self.net1 = StateActionFunction(state_dim, action_dim, hidden_units, output_dim)
+        self.net2 = StateActionFunction(state_dim, action_dim, hidden_units, output_dim)
 
     def forward(self, states, actions):
         assert states.dim() == 2 and actions.dim() == 2
@@ -110,7 +110,7 @@ class GaussianHybridPolicy(BaseNetwork):
     LOG_STD_MAX = 2
     LOG_STD_MIN = -20
 
-    def __init__(self, state_dim, action_continuous_dim, action_discrete_dims=[3], hidden_units=[256, 256]):
+    def __init__(self, state_dim, action_cont_dim, action_disc_dims=[3], hidden_units=[256, 256]):
         super().__init__()
 
         self.net = create_linear_network(
@@ -118,10 +118,10 @@ class GaussianHybridPolicy(BaseNetwork):
             output_dim = hidden_units[-1],
             hidden_units=hidden_units[:-1])
 
-        self.continuous_head = nn.Linear(hidden_units[-1], 2 * action_continuous_dim) # * 2, media/std
-        self.discrete_heads = []
-        for dim in action_discrete_dims: # initialize all discrete heads (one for discrete output)
-            self.discrete_heads.append(nn.Linear(hidden_units[-1], dim))
+        self.continuous_head = nn.Linear(hidden_units[-1], 2 * action_cont_dim) # * 2, mean/std for each cont feat
+        self.discrete_heads = nn.ModuleList([
+            nn.Linear(hidden_units[-1], dim) for dim in action_disc_dims
+        ])
 
         self.apply(initialize_weights_xavier)
 
@@ -131,7 +131,7 @@ class GaussianHybridPolicy(BaseNetwork):
 
         # --- Continuous head ---
         # Calculate means and stds of actions.
-        means, log_stds = torch.chunk(features_hidden, 2, dim=-1)
+        means, log_stds = torch.chunk(self.continuous_head(features_hidden), 2, dim=-1)
         log_stds = torch.clamp(
             log_stds, min=self.LOG_STD_MIN, max=self.LOG_STD_MAX)
         stds = log_stds.exp_()
@@ -154,3 +154,40 @@ class GaussianHybridPolicy(BaseNetwork):
             discrete_probs.append(F.softmax(logits, dim=-1))
 
         return cont_actions, cont_entropies, torch.tanh(means), discrete_probs
+
+
+class HybridStateActionFunction(BaseNetwork): # Critic NN
+
+    def __init__(self, state_dim, action_cont_dim, action_disc_dims=[3], hidden_units=[256,256]):
+        super().__init__()
+
+        self.net = create_linear_network(
+            input_dim=state_dim+action_cont_dim, # Critic input: state and continuous actions. NOT discrete
+            output_dim=hidden_units[-1],
+            hidden_units=hidden_units[:-1])
+
+        self.discrete_q_heads = nn.ModuleList([
+            nn.Linear(hidden_units[-1], dim) for dim in action_disc_dims
+        ])
+
+    def forward(self, x):
+        features = self.net(x)
+        return [head(features) for head in self.discrete_q_heads]
+
+
+class HybridTwinnedStateActionFunction(BaseNetwork):
+
+    def __init__(self, state_dim, action_cont_dim, action_disc_dims=[3], hidden_units=[256, 256]):
+        super().__init__()
+
+        self.net1 = HybridStateActionFunction(state_dim, action_cont_dim, action_disc_dims, hidden_units)
+        self.net2 = HybridStateActionFunction(state_dim, action_cont_dim, action_disc_dims, hidden_units)
+
+    def forward(self, states, cont_actions):
+        assert states.dim() == 2 and cont_actions.dim() == 2
+
+        x = torch.cat([states, cont_actions], dim=1)
+        q1_list = self.net1(x)
+        q2_list = self.net2(x)
+
+        return q1_list, q2_list

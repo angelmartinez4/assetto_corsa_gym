@@ -1,39 +1,47 @@
 import os
+
+import numpy as np
 import torch
 from torch.optim import Adam
 
 from .base import Algorithm
-from discor.network import TwinnedStateActionFunction, GaussianPolicy
-from discor.utils import disable_gradients, soft_update, update_params, \
+from ..network import HybridTwinnedStateActionFunction, GaussianHybridPolicy
+from ..utils import disable_gradients, soft_update, update_params, \
     assert_action
 
 
 import logging
 logger = logging.getLogger(__name__)
 
-class SAC(Algorithm):
 
-    def __init__(self, state_dim, action_dim, device, gamma=0.99, nstep=1,
-                 policy_lr=0.0003, q_lr=0.0003, entropy_lr=0.0003,
+class HSAC(Algorithm):
+
+    def __init__(self, state_dim, action_cont_dim, action_disc_dims, device, gamma=0.99,
+                 nstep=1, policy_lr=0.0003, q_lr=0.0003, entropy_lr=0.0003,
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
                  target_update_coef=0.005, log_interval=10, seed=0):
         super().__init__(
-            state_dim, action_dim, device, gamma, nstep, log_interval, seed)
+            state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed)
+        self._action_cont_dim = action_cont_dim
+        self._action_disc_dims = action_disc_dims
 
         # Build networks.
-        self._policy_net = GaussianPolicy(
+        self._policy_net = GaussianHybridPolicy(
             state_dim=self._state_dim,
-            action_dim=self._action_dim,
+            action_cont_dim=self._action_cont_dim,
+            action_disc_dims=self._action_disc_dims,
             hidden_units=policy_hidden_units
             ).to(self._device)
-        self._online_q_net = TwinnedStateActionFunction(
+        self._online_q_net = HybridTwinnedStateActionFunction(
             state_dim=self._state_dim,
-            action_dim=self._action_dim,
+            action_cont_dim=self._action_cont_dim,
+            action_disc_dims=self._action_disc_dims,
             hidden_units=q_hidden_units
             ).to(self._device)
-        self._target_q_net = TwinnedStateActionFunction(
+        self._target_q_net = HybridTwinnedStateActionFunction(
             state_dim=self._state_dim,
-            action_dim=self._action_dim,
+            action_cont_dim=self._action_cont_dim,
+            action_disc_dims=self._action_disc_dims,
             hidden_units=q_hidden_units
             ).to(self._device).eval()
 
@@ -47,14 +55,22 @@ class SAC(Algorithm):
         self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
         self._q_optim = Adam(self._online_q_net.parameters(), lr=q_lr)
 
-        # Target entropy is -|A|.
-        self._target_entropy = -float(self._action_dim)
+        # Target entropy is -|A_c|. (continuous)
+        self._target_entropy_cont = -float(self._action_cont_dim)
+
+        # Target discrete entropy
+        self._target_entropy_disc = [0.5 * torch.log(torch.tensor(float(k)))
+                                     for k in self._action_disc_dims]
 
         # We optimize log(alpha), instead of alpha.
-        self._log_alpha = torch.zeros(
+        self._log_alpha_cont = torch.zeros(
             1, device=self._device, requires_grad=True)
-        self._alpha = self._log_alpha.detach().exp()
-        self._alpha_optim = Adam([self._log_alpha], lr=entropy_lr)
+        self._log_alpha_disc = torch.zeros(1, device=self._device, requires_grad=True)
+        self._alpha_cont = self._log_alpha_cont.detach().exp()
+        self._alpha_disc = self._log_alpha_disc.detach().exp()
+
+        self._alpha_cont_optim = Adam([self._log_alpha_cont], lr=entropy_lr)
+        self._alpha_disc_optim = Adam([self._log_alpha_disc], lr=entropy_lr)
 
         self._target_update_coef = target_update_coef
         self.update_entropy = True
@@ -63,19 +79,33 @@ class SAC(Algorithm):
         state = torch.tensor(
             state[None, ...].copy(), dtype=torch.float, device=self._device)
         with torch.no_grad():
-            action, entropies, _ = self._policy_net(state)
-        action = action.cpu().numpy()[0]
-        assert_action(action)
-        return action, entropies
+            cont_actions, cont_entropies, _, disc_probs_list = self._policy_net(state)
+
+        cont_actions = cont_actions.cpu().numpy()[0]
+
+        # choose best action (argmax from probs) for each discrete action
+        disc_actions = [
+            probs.argmax(dim=-1).cpu().numpy()[0]
+            for probs in disc_probs_list
+        ]
+
+        return cont_actions, disc_actions
 
     def exploit(self, state):
         state = torch.tensor(
             state[None, ...].copy(), dtype=torch.float, device=self._device)
         with torch.no_grad():
-            _, entropies, action = self._policy_net(state)
-        action = action.cpu().numpy()[0]
-        assert_action(action)
-        return action, entropies
+            cont_actions, _, _, disc_probs_list = self._policy_net(state)
+        cont_actions = cont_actions.cpu().numpy()[0]
+        assert_action(cont_actions)
+
+        # choose best action (argmax from probs) for each discrete action
+        disc_actions = [
+            probs.argmax(dim=-1).cpu().numpy()[0]
+            for probs in disc_probs_list
+        ]
+
+        return cont_actions, disc_actions
 
     def update_target_networks(self):
         soft_update(
@@ -91,57 +121,91 @@ class SAC(Algorithm):
         states, actions, rewards, next_states, dones = batch
 
         # Update policy.
-        policy_loss, entropies = self.calc_policy_loss(states)
+        policy_loss, cont_entropies, disc_probs_list = self.calc_policy_loss(states)
         update_params(self._policy_optim, policy_loss)
 
         # Update the entropy coefficient.
-        entropy_loss = 0.
+        entropy_loss_cont = torch.zeros(1, device=self._device)
+        entropy_loss_disc = torch.zeros(1, device=self._device)
         if self.update_entropy:
-            entropy_loss = self.calc_entropy_loss(entropies)
-            update_params(self._alpha_optim, entropy_loss)
-            entropy_loss = entropy_loss.detach().item()
-        self._alpha = self._log_alpha.detach().exp()
+            entropy_loss_cont, entropy_loss_disc = self.calc_entropy_loss(cont_entropies, disc_probs_list)
+            update_params(self._alpha_cont_optim, entropy_loss_cont)
+            update_params(self._alpha_disc_optim, entropy_loss_disc)
+            entropy_loss_cont = entropy_loss_cont.detach().item()
+            entropy_loss_disc = entropy_loss_disc.detach().item()
+        self._alpha_cont = self._log_alpha_cont.detach().exp()
 
         if self._learning_steps % self._log_interval == 0:
             writer.add_scalar(
                 'loss/policy', policy_loss.detach().item(),
                 self._learning_steps)
             writer.add_scalar(
-                'loss/entropy', entropy_loss,
+                'loss/entropy_cont', entropy_loss_cont,
                 self._learning_steps)
             writer.add_scalar(
-                'stats/alpha', self._alpha.item(),
+                'loss/entropy_disc', entropy_loss_disc,
                 self._learning_steps)
             writer.add_scalar(
-                'stats/entropy', entropies.detach().mean().item(),
+                'stats/alpha', self._alpha_cont.item(),
+                self._learning_steps)
+            writer.add_scalar(
+                'stats/entropy', cont_entropies.detach().mean().item(),
                 self._learning_steps)
 
             return {"policy_loss": policy_loss.detach().item(),
-                    "entropy_loss": entropy_loss,
-                    "alpha": self._alpha.item(), "entropy": entropies.detach().mean().item()}
+                    "entropy_loss": entropy_loss_cont,
+                    "alpha": self._alpha_cont.item(), "entropy": cont_entropies.detach().mean().item()}
 
-    def calc_policy_loss(self, states):
+    def calc_policy_loss(self, states) -> tuple[torch.Tensor, torch.Tensor, list[torch.Tensor]]:
         # Resample actions to calculate expectations of Q.
-        sampled_actions, entropies, _ = self._policy_net(states)
+        cont_actions, cont_entropies, _, disc_probs_list = self._policy_net(states)
 
         # Expectations of Q with clipped double Q technique.
-        qs1, qs2 = self._online_q_net(states, sampled_actions)
-        qs = torch.min(qs1, qs2)
+        # each qi_list has a list for all discrete heads
+        # each list has a list for all possible values
+        # i.e. [[(q1,a0=0), (q1,a0=1)], [(q2, a1=-1), (q2, a1=0), (q2,a1=1)]
+        q1_list, q2_list = self._online_q_net(states, cont_actions)
 
-        # Policy objective is maximization of (Q + alpha * entropy).
-        assert qs.shape == entropies.shape
-        policy_loss = torch.mean((- qs - self._alpha * entropies))
+        #policy_loss = 0.0
+        policy_loss = torch.zeros(1, device=self._device)
 
-        return policy_loss, entropies.detach_()
+        for q1, q2, disc_probs in zip(q1_list, q2_list, disc_probs_list):
+            qs = torch.min(q1, q2)  # (B, Ki)
+            qs_expected = (disc_probs * qs).sum(dim=-1, keepdim=True)  # (B, 1)
 
-    def calc_entropy_loss(self, entropies):
-        assert not entropies.requires_grad
+            disc_log_probs = torch.log(disc_probs + 1e-8)
+            disc_entropies = -(disc_probs * disc_log_probs).sum(dim=-1, keepdim=True)  # (B, 1)
+
+            # Maximizar Q_esperado + αd * H_discreta + αc * H_continua
+            assert qs_expected.shape == disc_entropies.shape == cont_entropies.shape
+            policy_loss += torch.mean(
+                -qs_expected
+                - self._alpha_disc * disc_entropies
+                - self._alpha_cont * cont_entropies
+            )
+
+        return policy_loss, cont_entropies.detach_(), [p.detach() for p in disc_probs_list]
+
+    def calc_entropy_loss(self, cont_entropies, disc_probs_list) -> tuple[torch.Tensor, torch.Tensor]:
+        assert not cont_entropies.requires_grad
 
         # Intuitively, we increse alpha when entropy is less than target
         # entropy, vice versa.
-        entropy_loss = -torch.mean(
-            self._log_alpha * (self._target_entropy - entropies))
-        return entropy_loss
+        entropy_loss_cont = -torch.mean(
+            self._log_alpha_cont * (self._target_entropy_cont - cont_entropies))
+
+        # discrete alphas, for each discrete head (action)
+        #entropy_loss_disc = 0.0
+        entropy_loss_disc = torch.zeros(1, device=self._device)
+        for i, disc_probs in enumerate(disc_probs_list):
+            disc_log_probs = torch.log(disc_probs)
+            disc_entropies = -(disc_probs * disc_log_probs).sum(dim=-1, keepdim=True)
+            assert not disc_entropies.requires_grad
+
+            entropy_loss_disc += -torch.mean(
+                self._log_alpha_disc * (self._target_entropy_disc[i] - disc_entropies))
+
+        return entropy_loss_cont, entropy_loss_disc
 
     def update_q_functions(self, batch, writer, imp_ws1=None, imp_ws2=None):
         states, actions, rewards, next_states, dones = batch
@@ -176,7 +240,7 @@ class SAC(Algorithm):
             next_actions, next_entropies, _ = self._policy_net(next_states)
             next_qs1, next_qs2 = self._target_q_net(next_states, next_actions)
             next_qs = \
-                torch.min(next_qs1, next_qs2) + self._alpha * next_entropies
+                torch.min(next_qs1, next_qs2) + self._alpha_cont * next_entropies
 
         assert rewards.shape == next_qs.shape
         target_qs = rewards + (1.0 - dones) * self._discount * next_qs
