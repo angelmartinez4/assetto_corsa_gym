@@ -42,6 +42,19 @@ SAC:
   target_update_coef: 0.005
   log_interval: 10
 
+HSAC:
+  gamma: 0.992
+  nstep: 3
+  policy_lr: 0.0003
+  q_lr: 0.0003
+  entropy_lr: 0.0003
+  policy_hidden_units: [256, 256, 256]
+  q_hidden_units: [256, 256, 256]
+  target_update_coef: 0.005
+  log_interval: 10
+  discrete_action_size: 1
+
+
 DisCor:
   error_lr: 0.0003
   error_hidden_units: [256, 256, 256, 256]
@@ -71,7 +84,7 @@ AssettoCorsa:
   penalize_actions_diff: False
   penalize_actions_diff_coef: 0.1
   max_steer_rate: 900.0   # steering: deg/s
-  track: "ks_barcelona-layout_gp"  # monza ks_barcelona-layout_gp ks_red_bull_ring-layout_gp, indianapolis_sp, ks_silverstone-gp
+  track: "ks_red_bull_ring-layout_gp"  # monza ks_barcelona-layout_gp ks_red_bull_ring-layout_gp, indianapolis_sp, ks_silverstone-gp
   car: "bmw_z4_gt3"              # dallara_f317, ks_mazda_miata, bmw_z4_gt3
   use_ac_out_of_track: True
   add_previous_obs_to_state: True

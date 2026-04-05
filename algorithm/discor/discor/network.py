@@ -116,7 +116,8 @@ class GaussianHybridPolicy(BaseNetwork):
         self.net = create_linear_network(
             input_dim=state_dim,
             output_dim = hidden_units[-1],
-            hidden_units=hidden_units[:-1])
+            hidden_units=hidden_units[:-1],
+            output_activation=None) # Trunk output is raw logits
 
         self.continuous_head = nn.Linear(hidden_units[-1], 2 * action_cont_dim) # * 2, mean/std for each cont feat
         self.discrete_heads = nn.ModuleList([
@@ -148,12 +149,18 @@ class GaussianHybridPolicy(BaseNetwork):
         cont_entropies = -cont_log_probs.sum(dim=1, keepdim=True)
 
         # --- Discrete head ---
-        discrete_probs = []
-        for head in self.discrete_heads:
+        disc_probs = []
+        disc_entropies = []
+        for head in self.discrete_heads: # have to iterate since heads can have different size
             logits = head(features_hidden)
-            discrete_probs.append(F.softmax(logits, dim=-1))
+            probs = F.softmax(logits, dim=-1)
+            disc_probs.append(probs)
 
-        return cont_actions, cont_entropies, torch.tanh(means), discrete_probs
+            # Discrete entropies: -sum(probs * log(probs))
+            disc_entropy = -(probs * torch.log(probs + 1e-8)).sum(dim=1, keepdim=True)
+            disc_entropies.append(disc_entropy)
+
+        return cont_actions, cont_entropies, torch.tanh(means), disc_probs, disc_entropies
 
 
 class HybridStateActionFunction(BaseNetwork): # Critic NN
@@ -164,7 +171,8 @@ class HybridStateActionFunction(BaseNetwork): # Critic NN
         self.net = create_linear_network(
             input_dim=state_dim+action_cont_dim, # Critic input: state and continuous actions. NOT discrete
             output_dim=hidden_units[-1],
-            hidden_units=hidden_units[:-1])
+            hidden_units=hidden_units[:-1],
+            output_activation=None) # Trunk output is raw logits
 
         self.discrete_q_heads = nn.ModuleList([
             nn.Linear(hidden_units[-1], dim) for dim in action_disc_dims
@@ -172,10 +180,10 @@ class HybridStateActionFunction(BaseNetwork): # Critic NN
 
     def forward(self, x):
         features = self.net(x)
-        return [head(features) for head in self.discrete_q_heads]
+        return [head(features) for head in self.discrete_q_heads] # q_value for each discrete action/head
 
 
-class HybridTwinnedStateActionFunction(BaseNetwork):
+class HybridTwinnedStateActionFunction(BaseNetwork): # Critic has two NN for Double Q Clipping technique
 
     def __init__(self, state_dim, action_cont_dim, action_disc_dims=[3], hidden_units=[256, 256]):
         super().__init__()
@@ -187,7 +195,7 @@ class HybridTwinnedStateActionFunction(BaseNetwork):
         assert states.dim() == 2 and cont_actions.dim() == 2
 
         x = torch.cat([states, cont_actions], dim=1)
-        q1_list = self.net1(x)
-        q2_list = self.net2(x)
+        q1_list = self.net1(x) # q_value for each discrete action
+        q2_list = self.net2(x) # q_value for each discrete action
 
         return q1_list, q2_list
