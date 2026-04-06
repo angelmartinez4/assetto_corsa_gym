@@ -1,8 +1,8 @@
 import os
 
-from .sac import SAC
-from discor.network import GaussianPolicy
-from discor.utils import disable_gradients
+from algorithm.discor.discor.algorithm.sac import SAC
+from algorithm.discor.discor.network import GaussianPolicy
+from algorithm.discor.discor.utils import disable_gradients
 
 
 class EvalAlgorithm(SAC):

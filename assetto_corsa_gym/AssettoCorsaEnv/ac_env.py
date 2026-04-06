@@ -13,12 +13,12 @@ import yaml
 import json
 from pathlib import Path
 
-from AssettoCorsaEnv.ac_client import Client
-from AssettoCorsaEnv.track import Track
-from AssettoCorsaEnv.reference_lap import ReferenceLap
-import AssettoCorsaEnv.sensors_ray_casting as sensors_ray_casting
-from AssettoCorsaEnv.sensors_ray_casting import MAX_RAY_LEN
-from AssettoCorsaEnv.gap import get_gap
+from assetto_corsa_gym.AssettoCorsaEnv.ac_client import Client
+from assetto_corsa_gym.AssettoCorsaEnv.track import Track
+from assetto_corsa_gym.AssettoCorsaEnv.reference_lap import ReferenceLap
+import assetto_corsa_gym.AssettoCorsaEnv.sensors_ray_casting as sensors_ray_casting
+from assetto_corsa_gym.AssettoCorsaEnv.sensors_ray_casting import MAX_RAY_LEN
+from assetto_corsa_gym.AssettoCorsaEnv.gap import get_gap
 
 import torch
 

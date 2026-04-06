@@ -6,9 +6,9 @@ import pickle
 from pathlib import Path
 from tqdm import tqdm
 
-from discor.replay_buffer import ReplayBuffer, EnsembleBuffer
-from discor.utils import RunningMeanStats
-from AssettoCorsaEnv.data_loader import DataLoader
+from algorithm.discor.discor.replay_buffer import ReplayBuffer, EnsembleBuffer
+from algorithm.discor.discor.utils import RunningMeanStats
+from assetto_corsa_gym.AssettoCorsaEnv.data_loader import DataLoader
 
 import logging
 logger = logging.getLogger(__name__)

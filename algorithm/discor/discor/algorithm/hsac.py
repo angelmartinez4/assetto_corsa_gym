@@ -4,9 +4,9 @@ import numpy as np
 import torch
 from torch.optim import Adam
 
-from .base import Algorithm
-from ..network import HybridTwinnedStateActionFunction, GaussianHybridPolicy
-from ..utils import disable_gradients, soft_update, update_params, \
+from algorithm.discor.discor.algorithm.base import Algorithm
+from algorithm.discor.discor.network import HybridTwinnedStateActionFunction, GaussianHybridPolicy
+from algorithm.discor.discor.utils import disable_gradients, soft_update, update_params, \
     assert_action
 
 import logging

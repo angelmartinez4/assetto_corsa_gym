@@ -9,7 +9,7 @@ from collections import defaultdict
 import logging
 logger = logging.getLogger(__name__)
 
-from AssettoCorsaEnv.brake_map import BrakeMap
+from assetto_corsa_gym.AssettoCorsaEnv.brake_map import BrakeMap
 
 def read_yml(f):
     with open(f, 'r') as file:

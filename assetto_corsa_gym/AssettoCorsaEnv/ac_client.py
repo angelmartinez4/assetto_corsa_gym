@@ -6,8 +6,8 @@ import time
 import pandas as pd
 import numpy as np
 import os
-from AssettoCorsaEnv.pygame_joystick_handler import JoystickHandler
-from AssettoCorsaPlugin.plugins.sensors_par.car_control import Controls
+from assetto_corsa_gym.AssettoCorsaEnv.pygame_joystick_handler import JoystickHandler
+from assetto_corsa_gym.AssettoCorsaPlugin.plugins.sensors_par.car_control import Controls
 
 if sys.platform.startswith("win"):
     import AssettoCorsaPlugin.plugins.sensors_par.dual_buffer as dual_buffer

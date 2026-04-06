@@ -6,8 +6,8 @@ import copy
 script_path = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.abspath(os.path.join(script_path, 'assetto_corsa_gym')))
 
-import AssettoCorsaEnv.ac_env as ac_env
-from AssettoCorsaEnv.ac_client import Client
+import assetto_corsa_gym.AssettoCorsaEnv.ac_env as ac_env
+from assetto_corsa_gym.AssettoCorsaEnv.ac_client import Client
 
 import logging
 logger = logging.getLogger(__name__)

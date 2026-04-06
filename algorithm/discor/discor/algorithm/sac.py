@@ -3,8 +3,8 @@ import torch
 from torch.optim import Adam
 
 from .base import Algorithm
-from ..network import TwinnedStateActionFunction, GaussianPolicy
-from ..utils import disable_gradients, soft_update, update_params, \
+from algorithm.discor.discor.network import TwinnedStateActionFunction, GaussianPolicy
+from algorithm.discor.discor.utils import disable_gradients, soft_update, update_params, \
     assert_action
 
 

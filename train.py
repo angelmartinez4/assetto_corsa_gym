@@ -9,13 +9,13 @@ from omegaconf import OmegaConf
 import torch
 
 # Add paths
-sys.path.extend([os.path.abspath('./assetto_corsa_gym'), './algorithm/discor'])
+#sys.path.extend([os.path.abspath('./assetto_corsa_gym'), './algorithm/discor'])
 
 # Custom module imports
-import AssettoCorsaEnv.assettoCorsa as assettoCorsa
-import AssettoCorsaEnv.data_loader as data_loader
-from discor.algorithm import SAC, DisCor
-from discor.agent import Agent
+import assetto_corsa_gym.AssettoCorsaEnv.assettoCorsa as assettoCorsa
+import assetto_corsa_gym.AssettoCorsaEnv.data_loader as data_loader
+from algorithm.discor.discor.algorithm import SAC, DisCor
+from algorithm.discor.discor.agent import Agent
 import common.misc as misc
 import common.logging_config as logging_config
 from common.logger import Logger
