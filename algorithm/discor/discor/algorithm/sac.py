@@ -75,7 +75,6 @@ class SAC(Algorithm):
             _, entropies, action = self._policy_net(state)
         action = action.cpu().numpy()[0]
         assert_action(action)
-        print(f'exploit ejecutando. Accion: {action}')
         return action, entropies
 
     def update_target_networks(self):

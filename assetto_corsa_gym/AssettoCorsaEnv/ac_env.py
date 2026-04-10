@@ -456,14 +456,17 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.raw_actions = actions.copy()
 
         # actions are deltas, update current controls
-        self.current_actions = self.preprocess_actions(actions, self.current_actions)
-        self.actions = self.current_actions
+        # preprocess only continuous actions, then merge with discrete ones
+        self.current_actions = self.preprocess_actions(actions[:self.action_cont_dim], self.current_actions)
+        self.actions = np.concatenate([self.current_actions, actions[self.action_cont_dim:]])
 
         #
-        gear_params = {"enable_gear_shift": False}
+        gear_params = {"enable_gear_shift": False, "shift_up": False, "shift_down": False}
 
         if use_gear_shift:
-            print('use gear shift TRUE')
+            if len(actions) < 4 or len(actions) > 5:
+                print(f'suspicious action len: {len(actions)}.\n'
+                      f'suspicios actions: {actions}')
             gear_idx = int(actions[3])
             gear_params = {
                 0: {"enable_gear_shift": False},
@@ -471,13 +474,10 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
                 2: {"enable_gear_shift": True, "shift_up": False, "shift_down": True}
             }[gear_idx]
 
-        print(f"steer={self.actions[0]}, acc={self.actions[1]}, brake={self.actions[2]}, types={type(self.actions[0])}")
-
-
         self.client.controls.set_controls(steer=self.actions[0],
                                           acc=self.actions[1],
-                                          brake=self.actions[2]
-                                          )
+                                          brake=self.actions[2],
+                                          ** gear_params)
 
         self.client.respond_to_server()  # execute set actions
 
@@ -491,7 +491,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.total_steps += 1
 
         if action is not None:
-            self.set_actions(action)
+            self.set_actions(action, use_gear_shift=False)
 
         state = self.client.step_sim()
         state["timestamp_env"] = time.perf_counter()
@@ -654,6 +654,8 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         dist_to_border = state["dist_to_border"]
 
         r = speed
+        if speed < 0:
+            print(f'negative speed: {speed}')
         if self.use_reference_line_in_reward:
             r *= ( 1.0 - (np.abs( state["gap"]) / 12.00))
         r /= 300. # normalize

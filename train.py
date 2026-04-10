@@ -96,7 +96,6 @@ def main():
         raise Exception('You need to set algo hsac sac or discor')
 
     print(algo)
-
     # Update the logger configuration with dynamic values
     config.exp_name = f'{config.AssettoCorsa.car}-{config.AssettoCorsa.track}'
     config.action_dim = env.action_cont_dim

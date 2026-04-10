@@ -91,13 +91,13 @@ class HSAC(Algorithm):
             for prob in disc_probs_list
         ]
 
-        return cont_actions, disc_actions
+        return np.concatenate([cont_actions, np.concatenate(disc_actions)]), cont_entropies # TODO Angel Revisar entropias
 
     def exploit(self, state):
         state = torch.tensor(
             state[None, ...].copy(), dtype=torch.float, device=self._device)
         with torch.no_grad():
-            cont_actions, _, _, disc_probs_list, _ = self._policy_net(state)
+            cont_actions, cont_entropies, _, disc_probs_list, _ = self._policy_net(state)
         cont_actions = cont_actions.cpu().numpy()[0]
         assert_action(cont_actions)
 
@@ -107,7 +107,7 @@ class HSAC(Algorithm):
             for probs in disc_probs_list
         ]
 
-        return cont_actions, disc_actions
+        return np.concatenate([cont_actions, np.concatenate(disc_actions)]), cont_entropies
 
     def update_target_networks(self):
         soft_update(
@@ -222,8 +222,10 @@ class HSAC(Algorithm):
         states, actions, rewards, next_states, dones = batch
 
         # Calculate current and target Q values.
-        # TODO fill batch with discrete actions and get them
-        curr_qs1_list, curr_qs2_list = self.calc_current_qs(states, actions)
+        disc_actions = actions[:, self._action_cont_dim:] # keep batch dimension, select cont actions
+        cont_actions = actions[:, :self._action_cont_dim]
+        disc_actions_list = [disc_actions[:, i] for i in range(disc_actions.shape[1])]  # list of N tensors (128,)
+        curr_qs1_list, curr_qs2_list = self.calc_current_qs(states, cont_actions, disc_actions_list)
         target_qs_list = self.calc_target_qs(rewards, next_states, dones)
 
         # Update Q functions.
