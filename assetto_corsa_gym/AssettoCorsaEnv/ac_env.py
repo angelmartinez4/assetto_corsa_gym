@@ -6,6 +6,7 @@ import pickle
 from gym import spaces
 from gym import Env
 from gym.spaces import Box
+from gym.spaces import MultiDiscrete, Dict
 from gym import utils as gym_utils
 from datetime import datetime
 import time
@@ -331,8 +332,15 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.controls_max_values = np.array([ self.norm_steer_at_max,  1.0,  1.0])
 
         # actions space is always -1 to 1 for most algorithms
-        self.action_dim = 3
-        self.action_space = Box(low=np.array([-1.0, -1.0, -1.0]), high=np.array([1.0, 1.0, 1.0]))
+        self.action_cont_dim = config.action_cont_dim # 3, steer acc brake
+        self.action_disc_dims = config.action_disc_dims
+        self.action_total_dim = self.action_cont_dim + len(self.action_disc_dims)
+
+        #self.action_space = Box(low=np.array([-1.0, -1.0, -1.0]), high=np.array([1.0, 1.0, 1.0]))
+        self.action_space = Dict({
+            "cont": Box(low=np.array([-1.0, -1.0, -1.0]), high=np.array([1.0, 1.0, 1.0])), # not general but not mine
+            "disc": MultiDiscrete(self.action_disc_dims)
+        })
 
         state_dim = len( self.obs_enabled_channels )
         if self.enable_sensors:
@@ -395,6 +403,24 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         self.is_metaworld = False
 
+    def action_space_sample(self, sample_cont: bool, sample_disc: bool):
+        assert sample_disc or sample_cont
+        if sample_disc and sample_cont:
+            return np.concatenate([self.action_space["cont"].sample(),
+                                   self.action_space["disc"].sample()])
+        if sample_cont:
+            return self.action_space["cont"].sample()
+        return self.action_space["disc"].sample()
+
+    def action_space_shape(self, cont_shape: bool, disc_shape: bool):
+        assert cont_shape or disc_shape
+        shape = 0
+        if cont_shape:
+            shape += self.action_space["cont"].shape[0]
+        if disc_shape:
+            shape += self.action_space["disc"].shape[0]
+        return (shape,)
+
     def set_reset_state(self, send_reset_at_start):
         self.send_reset_at_start = send_reset_at_start
 
@@ -422,7 +448,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         else:
             return np.clip(current_abs_actions, self.controls_min_values, self.controls_max_values)
 
-    def set_actions(self, actions):
+    def set_actions(self, actions, use_gear_shift=False):
         """
         Apply the actions to the sim right away. The step function can be called later
         """
@@ -433,8 +459,27 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.current_actions = self.preprocess_actions(actions, self.current_actions)
         self.actions = self.current_actions
 
-        self.client.controls.set_controls(steer=self.actions[0], acc=self.actions[1], brake=self.actions[2])
-        self.client.respond_to_server()
+        #
+        gear_params = {"enable_gear_shift": False}
+
+        if use_gear_shift:
+            print('use gear shift TRUE')
+            gear_idx = int(actions[3])
+            gear_params = {
+                0: {"enable_gear_shift": False},
+                1: {"enable_gear_shift": True, "shift_up": True, "shift_down": False},
+                2: {"enable_gear_shift": True, "shift_up": False, "shift_down": True}
+            }[gear_idx]
+
+        print(f"steer={self.actions[0]}, acc={self.actions[1]}, brake={self.actions[2]}, types={type(self.actions[0])}")
+
+
+        self.client.controls.set_controls(steer=self.actions[0],
+                                          acc=self.actions[1],
+                                          brake=self.actions[2]
+                                          )
+
+        self.client.respond_to_server()  # execute set actions
 
     def step(self, action=None):
         """
@@ -454,11 +499,11 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.state, buf_infos = self.expand_state(state)
 
         # add the current absolute actions to the state
-        for i in range(self.action_dim):
+        for i in range(self.action_cont_dim):
             self.state[f'current_action_abs_{i:01d}'] = self.current_actions[i]
 
         # save input actions
-        for i in range(self.action_dim):
+        for i in range(self.action_cont_dim):
             self.state[f'actions_{i:01d}'] = self.raw_actions[i]
 
         # create obs
@@ -696,8 +741,9 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
     def get_current_image(self):
         return self.client.get_current_image()
 
-    def rand_act(self):
-        return torch.from_numpy(self.action_space.sample().astype(np.float32))
+    def rand_act(self, has_discrete_actions: bool):
+        #return torch.from_numpy(self.action_space.sample().astype(np.float32))
+        return torch.from_numpy(self.action_space_sample(True, has_discrete_actions).astype(np.float32))
 
     def get_obs(self, state, history=None):
         """
@@ -730,9 +776,9 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         # add previous absolute actions. Not including the current action (the one that got the sim to the current state)
         if len(history) < PAST_ACTIONS_WINDOW:
-            filler = np.zeros(PAST_ACTIONS_WINDOW*self.action_dim)
+            filler = np.zeros(PAST_ACTIONS_WINDOW * self.action_cont_dim)
             obs = np.hstack([obs, filler])
-            actions_diff = np.zeros(self.action_dim)
+            actions_diff = np.zeros(self.action_cont_dim)
         else:
             current_controls_steer_prev = np.array( [history[i]['steerAngle'] / self.obs_channels_info['steerAngle'] for i in range(-PAST_ACTIONS_WINDOW,0) ]) # if PAST_ACTIONS_WINDOW=3; -3, -2, -1
             current_controls_pedal_prev = np.array( [history[i]['accStatus'] for i in range(-PAST_ACTIONS_WINDOW,0) ])

@@ -35,14 +35,17 @@ class Agent:
 
         # Algorithm.
         self._algo = algo
+        self._flattened_action_space_shape = self._env.action_space_shape(cont_shape=True,
+                                                                          disc_shape=self._algo._has_disc_actions)
 
         if use_offline_buffer:
             self._replay_buffer = EnsembleBuffer(memory_size=memory_size, state_shape=self._env.observation_space.shape,
-                                                 action_shape=self._env.action_space.shape, gamma=self._algo.gamma, nstep=self._algo.nstep, offline_buffer_size=offline_buffer_size)
-        else:
+                                                 action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep, offline_buffer_size=offline_buffer_size)
+        else: # TODO Angel. Buffer tiene acciones aplanadas (del entorno). Por ahora pinta todo en orden
             # Replay buffer with n-step return.
+            print(self._algo.gamma)
             self._replay_buffer = ReplayBuffer(memory_size=memory_size, state_shape=self._env.observation_space.shape,
-                                               action_shape=self._env.action_space.shape, gamma=self._algo.gamma, nstep=self._algo.nstep)
+                                               action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep)
 
         # Directory to log.
         self._log_dir = log_dir
@@ -146,13 +149,14 @@ class Agent:
             while (not done):
                 start_profile = time.perf_counter()
                 if self._start_steps > self._steps:
-                    action = self._env.action_space.sample()
+                    #action = self._env.action_space.sample() # TODO Angel. Action vieja
+                    action = self._env.action_space_sample(True, self._algo.has_disc_actions)
                 else:
                     action, _ = self._algo.explore(state)
                 action_perf.append(time.perf_counter() - start_profile)
 
                 # apply actions right away without blocking
-                self._env.set_actions(action)
+                self._env.set_actions(action, self._algo.has_disc_actions) # TODO Angel. todo en orden?
 
                 # update model
                 start_profile = time.perf_counter()
@@ -161,7 +165,8 @@ class Agent:
                 update_model_perf.append(time.perf_counter() - start_profile)
 
                 # get observations
-                next_state, reward, done, info = self._env.step(action=None)  # action is already applied
+                print(f'train actions: {action}')
+                next_state, reward, done, info = self._env.step(action=None)  # action is already applied # TODO Angel
                 step_perf.append(time.perf_counter() - step_start_time)
                 step_start_time = time.perf_counter()
 
@@ -257,6 +262,7 @@ class Agent:
 
                 while (not done):
                     action, entropies = self._algo.exploit(state)
+                    print(f'evaluate actions: {action}') # TODO Angel check
                     next_state, reward, done, info = self._test_env.step(action)
                     self._test_env.states[-1]["entropies"] = entropies.cpu().numpy().item()
                     episode_return += reward

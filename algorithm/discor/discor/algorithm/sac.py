@@ -18,7 +18,7 @@ class SAC(Algorithm):
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
                  target_update_coef=0.005, log_interval=10, seed=0):
         super().__init__(
-            state_dim, action_dim, device, gamma, nstep, log_interval, seed)
+            state_dim, action_dim, device, gamma, nstep, log_interval, seed, has_disc_actions=False)
 
         # Build networks.
         self._policy_net = GaussianPolicy(
@@ -75,6 +75,7 @@ class SAC(Algorithm):
             _, entropies, action = self._policy_net(state)
         action = action.cpu().numpy()[0]
         assert_action(action)
+        print(f'exploit ejecutando. Accion: {action}')
         return action, entropies
 
     def update_target_networks(self):

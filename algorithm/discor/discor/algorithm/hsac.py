@@ -16,12 +16,13 @@ logger = logging.getLogger(__name__)
 
 class HSAC(Algorithm):
 
-    def __init__(self, state_dim, action_cont_dim, action_disc_dims, device, gamma=0.99,
+    def __init__(self, state_dim, action_cont_dim, device, action_disc_dims=None, gamma=0.99,
                  nstep=1, policy_lr=0.0003, q_lr=0.0003, entropy_lr=0.0003,
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
-                 target_update_coef=0.005, log_interval=10, seed=0):
+                 target_update_coef=0.005, log_interval=10, seed=0, action_disc_names=['gear']):
         super().__init__(
-            state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed)
+            state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed, has_disc_actions=True)
+        assert action_disc_dims is not None
         self._action_cont_dim = action_cont_dim
         self._action_disc_dims = action_disc_dims
 

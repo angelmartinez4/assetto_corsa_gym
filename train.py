@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 import copy
@@ -9,12 +10,12 @@ from omegaconf import OmegaConf
 import torch
 
 # Add paths
-#sys.path.extend([os.path.abspath('./assetto_corsa_gym'), './algorithm/discor'])
+sys.path.extend([os.path.abspath('./assetto_corsa_gym'), './algorithm/discor'])
 
 # Custom module imports
 import assetto_corsa_gym.AssettoCorsaEnv.assettoCorsa as assettoCorsa
 import assetto_corsa_gym.AssettoCorsaEnv.data_loader as data_loader
-from algorithm.discor.discor.algorithm import SAC, DisCor
+from algorithm.discor.discor.algorithm import SAC, DisCor, HSAC
 from algorithm.discor.discor.agent import Agent
 import common.misc as misc
 import common.logging_config as logging_config
@@ -75,22 +76,30 @@ def main():
     if args.algo == 'discor':
         algo = DisCor(
             state_dim=env.observation_space.shape[0],
-            action_dim=env.action_space.shape[0],
+            action_dim=env.action_cont_dim,
             device=device, seed=config.seed,
             **OmegaConf.to_container(config.SAC), **OmegaConf.to_container(config.DisCor))
     elif args.algo == 'sac':
         algo = SAC(
             state_dim=env.observation_space.shape[0],
-            action_dim=env.action_space.shape[0],
+            action_dim=env.action_cont_dim,
             device=device, seed=config.seed,
             **OmegaConf.to_container(config.SAC))
+    elif args.algo == 'hsac':
+        algo = HSAC(
+            state_dim=env.observation_space.shape[0],
+            action_cont_dim=env.action_cont_dim,
+            action_disc_dims=env.action_disc_dims,
+            device=device, seed=config.seed,
+            **OmegaConf.to_container(config.HSAC))
     else:
-        raise Exception('You need to set algo sac or discor')
+        raise Exception('You need to set algo hsac sac or discor')
 
+    print(algo)
 
     # Update the logger configuration with dynamic values
     config.exp_name = f'{config.AssettoCorsa.car}-{config.AssettoCorsa.track}'
-    config.action_dim = env.action_dim
+    config.action_dim = env.action_cont_dim
     config.steps = config.Agent.num_steps
 
     # Initialize wandb logger

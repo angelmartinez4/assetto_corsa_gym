@@ -3,7 +3,7 @@ import torch
 from torch.optim import Adam
 from torch.nn import functional as F
 
-from sac import SAC
+from .sac import SAC
 from algorithm.discor.discor.network import TwinnedStateActionFunction
 from algorithm.discor.discor.utils import disable_gradients, soft_update, update_params
 

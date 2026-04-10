@@ -53,7 +53,7 @@ def print_run(cfg):
         ("task", cfg.task_title),
         ("steps", f"{int(cfg.steps):,}"),
         #("observations", observations),
-        ("actions", cfg.action_dim),
+        ("actions", cfg.action_cont_dim),
         ("experiment", cfg.exp_name),
     ]
     w = np.max([len(_limstr(str(kv[1]))) for kv in kvs]) + 25

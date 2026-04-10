@@ -2,12 +2,12 @@ import os
 
 if os.name == 'posix':
     try:
-        from AssettoCorsaEnv.vjoy_linux import vJoy
+        from assetto_corsa_gym.AssettoCorsaEnv.vjoy_linux import vJoy
     except:
         from vjoy_linux import vJoy
 else:
     try:
-        from AssettoCorsaEnv.vjoy import vJoy
+        from assetto_corsa_gym.AssettoCorsaEnv.vjoy import vJoy
     except:
         from vjoy import vJoy
 

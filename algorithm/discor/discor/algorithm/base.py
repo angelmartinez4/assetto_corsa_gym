@@ -8,7 +8,7 @@ class Algorithm(ABC):
 
     @abstractmethod
     def __init__(self, state_dim, action_dim, device, gamma=0.99, nstep=1,
-                 log_interval=10, seed=0):
+                 log_interval=10, seed=0, has_disc_actions=False):
         # Set seed.
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -23,6 +23,7 @@ class Algorithm(ABC):
         self._nstep = nstep
         self._discount = gamma ** nstep
         self._log_interval = log_interval
+        self._has_disc_actions = has_disc_actions
 
     @abstractmethod
     def explore(self, state):

@@ -10,7 +10,7 @@ from assetto_corsa_gym.AssettoCorsaEnv.pygame_joystick_handler import JoystickHa
 from assetto_corsa_gym.AssettoCorsaPlugin.plugins.sensors_par.car_control import Controls
 
 if sys.platform.startswith("win"):
-    import AssettoCorsaPlugin.plugins.sensors_par.dual_buffer as dual_buffer
+    import assetto_corsa_gym.AssettoCorsaPlugin.plugins.sensors_par.dual_buffer as dual_buffer
 
 logger = logging.getLogger(__name__)
 
