@@ -148,14 +148,19 @@ class Agent:
             while (not done):
                 start_profile = time.perf_counter()
                 if self._start_steps > self._steps:
-                    #action = self._env.action_space.sample() # TODO Angel. Action vieja
+                    #action = self._env.action_space.sample() # Old sample, was only continuous
                     action = self._env.action_space_sample(True, self._algo._has_disc_actions)
                 else:
                     action, _ = self._algo.explore(state)
+                    if self._algo._has_disc_actions:
+                        if self._algo.has_heuristic_gear and self._steps < self._algo.heuristic_gear_steps:
+                            # TODO Angel hacer acc heuristica. Va bien?
+                            gear_idx = self._env.action_total_dim - len(self._env.action_disc_dims)
+                            action[gear_idx] = self._heuristic_gear()
                 action_perf.append(time.perf_counter() - start_profile)
 
                 # apply actions right away without blocking
-                self._env.set_actions(action, self._algo._has_disc_actions) # TODO Angel. todo en orden?
+                self._env.set_actions(action, self._algo._has_disc_actions)
 
                 # update model
                 start_profile = time.perf_counter()
@@ -249,6 +254,20 @@ class Agent:
         self.episodes_stats.append(eval_metrics)
         pd.DataFrame(self.episodes_stats).to_csv(os.path.join(self._log_dir, 'summary.csv'), index=None)
         logger.info(f'Episode done. Took {ep_time:.2f}s.  Steps per episode: {episode_steps}. Buffer size: {len(self._replay_buffer)} fps: {episode_steps/ep_time:.2f}')
+
+    def _heuristic_gear(self):
+        # rpm = self._env.state["RPM"]
+        # rpm_range = self._algo.heuristic_rpm_range
+        speed = self._env.state["speed"] * 3.6  # to kmh
+        curr_gear = self._env.state["actualGear"] # map to actual gear values since 0 is reverse, 1 is neutral...
+        speed_range = self._algo.heuristic_speed_gear_range  # speed range for gear changes in kmh
+        gear_speed_bounds = speed_range[curr_gear]
+        speed_downshift, speed_upshit = gear_speed_bounds[0], gear_speed_bounds[1]
+        if speed < speed_downshift:
+            return 2  # downshift
+        if speed > speed_upshit:
+            return 1  # upshift
+        return 0  # no shift
 
     def evaluate(self):
         try:

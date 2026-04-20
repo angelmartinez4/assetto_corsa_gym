@@ -19,12 +19,17 @@ class HSAC(Algorithm):
     def __init__(self, state_dim, action_cont_dim, device, action_disc_dims=None, gamma=0.99,
                  nstep=1, policy_lr=0.0003, q_lr=0.0003, entropy_lr=0.0003,
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
-                 target_update_coef=0.005, log_interval=10, seed=0, action_disc_names=['gear']):
+                 target_update_coef=0.005, log_interval=10, seed=0, use_heuristic_gear=False,
+                 heuristic_gear_steps=0, heuristic_rpm_range=[1000, 5000], heuristic_speed_gear_range=None):
         super().__init__(
             state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed, has_disc_actions=True)
         assert action_disc_dims is not None
         self._action_cont_dim = action_cont_dim
         self._action_disc_dims = action_disc_dims
+        self.has_heuristic_gear = use_heuristic_gear
+        self.heuristic_gear_steps = heuristic_gear_steps
+        self.heuristic_rpm_range = heuristic_rpm_range
+        self.heuristic_speed_gear_range = heuristic_speed_gear_range
 
         # Build networks.
         self._policy_net = GaussianHybridPolicy(
@@ -107,7 +112,7 @@ class HSAC(Algorithm):
             for probs in disc_probs_list
         ]
 
-        return np.concatenate([cont_actions, np.concatenate(disc_actions)]), cont_entropies
+        return np.concatenate([cont_actions, disc_actions]), cont_entropies
 
     def update_target_networks(self):
         soft_update(
@@ -198,7 +203,7 @@ class HSAC(Algorithm):
 
         policy_loss /= len(disc_probs_list)
 
-        return policy_loss, cont_entropies.detach_(), [e.detach() for e in disc_entropies_list]
+        return policy_loss, cont_entropies.detach(), [e.detach() for e in disc_entropies_list]
 
     def calc_entropy_loss(self, cont_entropies, disc_entropies_list) -> tuple[torch.Tensor, torch.Tensor]:
         assert not cont_entropies.requires_grad

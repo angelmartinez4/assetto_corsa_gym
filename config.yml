@@ -52,6 +52,10 @@ HSAC:
   q_hidden_units: [256, 256, 256]
   target_update_coef: 0.005
   log_interval: 10
+  use_heuristic_gear: False
+  heuristic_gear_steps: 2000000
+  # for each gear (0 reverse, 1 neutral...), lower and upper speed range to shift down/up
+  heuristic_speed_gear_range: [[-1, -1], [-1, -1], [-1, 80], [50, 110],[70, 150], [90, 200], [110, 230], [140, 320]]
 
 
 DisCor:
