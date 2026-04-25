@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-import torch.nn.functional as F # mover
+import torch.nn.functional as F
 from torch.distributions import Normal
 
 
@@ -42,12 +42,12 @@ class BaseNetwork(nn.Module):
 
 class StateActionFunction(BaseNetwork):
 
-    def __init__(self, state_dim, action_dim, hidden_units=[256, 256], output_dim=1):
+    def __init__(self, state_dim, action_dim, hidden_units=[256, 256]):
         super().__init__()
 
         self.net = create_linear_network(
             input_dim=state_dim+action_dim,
-            output_dim=output_dim,
+            output_dim=1,
             hidden_units=hidden_units)
 
     def forward(self, x):
@@ -56,11 +56,11 @@ class StateActionFunction(BaseNetwork):
 
 class TwinnedStateActionFunction(BaseNetwork):
 
-    def __init__(self, state_dim, action_dim, hidden_units=[256, 256], output_dim=1):
+    def __init__(self, state_dim, action_dim, hidden_units=[256, 256]):
         super().__init__()
 
-        self.net1 = StateActionFunction(state_dim, action_dim, hidden_units, output_dim)
-        self.net2 = StateActionFunction(state_dim, action_dim, hidden_units, output_dim)
+        self.net1 = StateActionFunction(state_dim, action_dim, hidden_units)
+        self.net2 = StateActionFunction(state_dim, action_dim, hidden_units)
 
     def forward(self, states, actions):
         assert states.dim() == 2 and actions.dim() == 2
@@ -125,6 +125,9 @@ class GaussianHybridPolicy(BaseNetwork):
         ])
 
         self.apply(initialize_weights_xavier)
+        for head in self.discrete_heads:
+            nn.init.constant_(head.bias, 0.0)
+            head.bias.data[0] = 2.0  # keep gear highest logit
 
     def forward(self, states):
         assert states.dim() == 2

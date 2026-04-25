@@ -41,7 +41,7 @@ class Agent:
         if use_offline_buffer:
             self._replay_buffer = EnsembleBuffer(memory_size=memory_size, state_shape=self._env.observation_space.shape,
                                                  action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep, offline_buffer_size=offline_buffer_size)
-        else: # TODO Angel. Buffer tiene acciones aplanadas (del entorno). Por ahora pinta todo en orden
+        else:
             # Replay buffer with n-step return.
             self._replay_buffer = ReplayBuffer(memory_size=memory_size, state_shape=self._env.observation_space.shape,
                                                action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep)
@@ -149,12 +149,17 @@ class Agent:
                 start_profile = time.perf_counter()
                 if self._start_steps > self._steps:
                     #action = self._env.action_space.sample() # Old sample, was only continuous
-                    action = self._env.action_space_sample(True, self._algo._has_disc_actions)
+                    if self._algo._has_disc_actions:
+                        if self._algo.biased_exploration:
+                            action = self._biased_exploration_sample()
+                        else:
+                            action = self._env.action_space_sample(True, self._algo._has_disc_actions)
+                    else:
+                        action = self._env.action_space_sample(True, self._algo._has_disc_actions)
                 else:
                     action, _ = self._algo.explore(state)
                     if self._algo._has_disc_actions:
                         if self._algo.has_heuristic_gear and self._steps < self._algo.heuristic_gear_steps:
-                            # TODO Angel hacer acc heuristica. Va bien?
                             gear_idx = self._env.action_total_dim - len(self._env.action_disc_dims)
                             action[gear_idx] = self._heuristic_gear()
                 action_perf.append(time.perf_counter() - start_profile)
@@ -259,7 +264,7 @@ class Agent:
         # rpm = self._env.state["RPM"]
         # rpm_range = self._algo.heuristic_rpm_range
         speed = self._env.state["speed"] * 3.6  # to kmh
-        curr_gear = self._env.state["actualGear"] # map to actual gear values since 0 is reverse, 1 is neutral...
+        curr_gear = self._env.state["actualGear"] # 0 is reverse, 1 is neutral...
         speed_range = self._algo.heuristic_speed_gear_range  # speed range for gear changes in kmh
         gear_speed_bounds = speed_range[curr_gear]
         speed_downshift, speed_upshit = gear_speed_bounds[0], gear_speed_bounds[1]
@@ -268,6 +273,17 @@ class Agent:
         if speed > speed_upshit:
             return 1  # upshift
         return 0  # no shift
+
+    def _biased_exploration_sample(self):
+        steer = np.random.uniform(-1, 1)
+        acc = np.random.uniform(-0.4, 0.5)  # siempre algo de gas
+        brake = np.random.uniform(-1, 0.9)  # freno bajo
+        cont = np.array([steer, acc, brake])
+
+        if self._algo._has_disc_actions:
+            disc = np.array([1]) if self._env.state["actualGear"] <= 1 else np.array([0])
+            return np.concatenate([cont, disc])
+        return cont
 
     def evaluate(self):
         try:
@@ -279,7 +295,7 @@ class Agent:
 
                 while (not done):
                     action, entropies = self._algo.exploit(state)
-                    self._env.set_actions(action, self._algo._has_disc_actions)
+                    self._test_env.set_actions(action, self._algo._has_disc_actions)
                     next_state, reward, done, info = self._test_env.step(action=None)
                     self._test_env.states[-1]["entropies"] = entropies.cpu().numpy().item()
                     episode_return += reward

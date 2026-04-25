@@ -55,7 +55,6 @@ class ReplayBuffer:
         assert isinstance(memory_size, int) and memory_size > 0
         assert isinstance(state_shape, tuple)
         assert isinstance(action_shape, tuple)
-        print(f'buffer action shape: {action_shape}')  # TODO Angel delete check
 
         assert isinstance(gamma, float) and 0 < gamma < 1.0
         assert isinstance(nstep, int) and nstep > 0

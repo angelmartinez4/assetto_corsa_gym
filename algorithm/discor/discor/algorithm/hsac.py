@@ -20,7 +20,8 @@ class HSAC(Algorithm):
                  nstep=1, policy_lr=0.0003, q_lr=0.0003, entropy_lr=0.0003,
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
                  target_update_coef=0.005, log_interval=10, seed=0, use_heuristic_gear=False,
-                 heuristic_gear_steps=0, heuristic_rpm_range=[1000, 5000], heuristic_speed_gear_range=None):
+                 heuristic_gear_steps=0, heuristic_rpm_range=[1000, 5000], heuristic_speed_gear_range=None,
+                 load_from_sac=False, load_sac_dir=None, biased_exploration= False, biased_exploration_steps= 0):
         super().__init__(
             state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed, has_disc_actions=True)
         assert action_disc_dims is not None
@@ -30,6 +31,10 @@ class HSAC(Algorithm):
         self.heuristic_gear_steps = heuristic_gear_steps
         self.heuristic_rpm_range = heuristic_rpm_range
         self.heuristic_speed_gear_range = heuristic_speed_gear_range
+        self.load_from_sac=load_from_sac
+        self.load_sac_dir = load_sac_dir
+        self.biased_exploration = biased_exploration
+        self.biased_exploration_steps = biased_exploration_steps
 
         # Build networks.
         self._policy_net = GaussianHybridPolicy(
@@ -58,14 +63,21 @@ class HSAC(Algorithm):
         disable_gradients(self._target_q_net)
 
         # Optimizers.
-        self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
+        if not self.load_from_sac:
+            self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
+        else:
+            self._policy_optim = Adam([
+                {'params': self._policy_net.net.parameters(), 'lr': policy_lr * 0.1},  # slow trunk
+                {'params': self._policy_net.continuous_head.parameters(), 'lr': policy_lr * 0.1},  # cont lento
+                {'params': self._policy_net.discrete_heads.parameters(), 'lr': policy_lr},  # disc normal
+            ])
         self._q_optim = Adam(self._online_q_net.parameters(), lr=q_lr)
 
         # Target entropy is -|A_c|. (continuous)
         self._target_entropy_cont = -float(self._action_cont_dim)
 
         # Target discrete entropy. Each head has a different one, initialized based on size
-        self._target_entropy_disc = torch.tensor([0.5 * torch.log(torch.tensor(float(k)))
+        self._target_entropy_disc = torch.tensor([0.3 * torch.log(torch.tensor(float(k)))
                                                  for k in self._action_disc_dims],
                                                  device=self._device)
 
@@ -82,6 +94,9 @@ class HSAC(Algorithm):
         self._target_update_coef = target_update_coef
         self.update_entropy = True
 
+        if self.load_from_sac:
+            self.load_cont_weights_from_sac()
+
     def explore(self, state):
         state = torch.tensor(
             state[None, ...].copy(), dtype=torch.float, device=self._device)
@@ -96,7 +111,7 @@ class HSAC(Algorithm):
             for prob in disc_probs_list
         ]
 
-        return np.concatenate([cont_actions, np.concatenate(disc_actions)]), cont_entropies # TODO Angel Revisar entropias
+        return np.concatenate([cont_actions, np.concatenate(disc_actions)]), cont_entropies
 
     def exploit(self, state):
         state = torch.tensor(
@@ -187,6 +202,7 @@ class HSAC(Algorithm):
         q1_list, q2_list = self._online_q_net(states, cont_actions)
 
         policy_loss = torch.zeros(1, device=self._device)
+        disc_loss = torch.zeros(1, device=self._device)
         # iterate over all discrete actions
         for q1, q2, disc_probs, disc_entropy in zip(q1_list, q2_list, disc_probs_list, disc_entropies_list):
             q_min = torch.min(q1, q2)  # (B, Ki). min(q1_d, q2_d) for each discrete action
@@ -195,13 +211,13 @@ class HSAC(Algorithm):
 
             # maximize q_min + alpha_d * H_disc + alpha_c * H_cont
             assert qs_expected.shape == disc_entropy.shape == cont_entropies.shape
-            policy_loss += torch.mean(
+            disc_loss += torch.mean(
                 -qs_expected
                 - self._alpha_disc * disc_entropy
-                - self._alpha_cont * cont_entropies
             )
 
-        policy_loss /= len(disc_probs_list)
+        disc_loss /= len(disc_probs_list)
+        policy_loss = disc_loss - torch.mean(self._alpha_cont * cont_entropies)
 
         return policy_loss, cont_entropies.detach(), [e.detach() for e in disc_entropies_list]
 
@@ -220,6 +236,7 @@ class HSAC(Algorithm):
             assert not entropy.requires_grad
             entropy_loss_disc += -torch.mean(
                 self._log_alpha_disc * (self._target_entropy_disc[i] - entropy))
+        entropy_loss_disc /= len(disc_entropies_list)
 
         return entropy_loss_cont, entropy_loss_disc
 
@@ -254,7 +271,7 @@ class HSAC(Algorithm):
 
         curr_qs1, curr_qs2 = [], []
         for i, (q1, q2) in enumerate(zip(q1_list, q2_list)):
-            idx = disc_actions_list[i].long().unsqueeze(-1) # test dimensions @TODO
+            idx = disc_actions_list[i].long().unsqueeze(-1)
             curr_qs1.append(q1.gather(1, idx))
             curr_qs2.append(q2.gather(1, idx))
 
@@ -305,8 +322,8 @@ class HSAC(Algorithm):
 
             q_loss += q1_loss + q2_loss
             # Mean Q values for logging.
-            mean_q1 = curr_qs1.detach().mean().item()
-            mean_q2 = curr_qs2.detach().mean().item()
+            mean_q1 += curr_qs1.detach().mean().item()
+            mean_q2 += curr_qs2.detach().mean().item()
 
         return q_loss, mean_q1 / n, mean_q2 / n
 
@@ -320,3 +337,33 @@ class HSAC(Algorithm):
         self._policy_net.load(os.path.join(load_dir, 'policy_net.pth'))
         self._online_q_net.load(os.path.join(load_dir, 'online_q_net.pth'))
         self._target_q_net.load(os.path.join(load_dir, 'target_q_net.pth'))
+
+    def load_cont_weights_from_sac(self):
+        sac_policy_sd = torch.load(os.path.join(self.load_sac_dir, 'policy_net.pth'), map_location=self._device)
+        sac_q_sd = torch.load(os.path.join(self.load_sac_dir, 'online_q_net.pth'), map_location=self._device)
+        sac_policy_keys = list(sac_policy_sd.keys())
+
+        # Policy
+        hsac_policy_sd = self._policy_net.state_dict()
+        sac_last_keys = set(sac_policy_keys[-2:])  # w&b last head is out of trunk
+
+        for sac_key, sac_val in sac_policy_sd.items():
+            if sac_key in hsac_policy_sd and hsac_policy_sd[sac_key].shape == sac_val.shape:
+                hsac_policy_sd[sac_key] = sac_val.clone()
+                print(f"[policy] {sac_key} → {sac_key}")
+            elif sac_key in sac_last_keys:
+                target = 'continuous_head.weight' if sac_key.endswith('.weight') else 'continuous_head.bias'
+                if hsac_policy_sd[target].shape == sac_val.shape:
+                    hsac_policy_sd[target] = sac_val.clone()
+                    print(f"[policy] {sac_key} → {target}")
+
+        self._policy_net.load_state_dict(hsac_policy_sd)
+
+        # Q nets
+        for net_attr in ['_online_q_net', '_target_q_net']:
+            hsac_q_sd = getattr(self, net_attr).state_dict() # self._online_q_net or self._target_q_net
+            for sac_key, sac_val in sac_q_sd.items():
+                if sac_key in hsac_q_sd and hsac_q_sd[sac_key].shape == sac_val.shape:
+                    hsac_q_sd[sac_key] = sac_val.clone()
+                    print(f"[{net_attr}] {sac_key} → {sac_key}")
+            getattr(self, net_attr).load_state_dict(hsac_q_sd)

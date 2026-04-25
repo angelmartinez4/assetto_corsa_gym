@@ -45,6 +45,11 @@ TERMINAL_JUDGE_TIMEOUT = 10.       # If after this number of seconds still no pr
 
 TOP_SPEED_MS = 80.
 
+# gear constants
+GEAR_KEEP = 0
+GEAR_UPSHIFT = 1
+GEAR_DOWNSHIFT = 2
+
 def get_date_timestemp():
     return datetime.now().strftime('%Y%m%d_%H%M%S.%f')[:-3]
 
@@ -267,6 +272,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.history_obs = []  # history of observations
         self.episodes_stats = []
         self.info = {}
+        self.state = {"actualGear": 1}
 
         self.total_steps = 0
         self.n_episodes = 0
@@ -336,7 +342,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.action_disc_dims = config.action_disc_dims
         self.action_total_dim = self.action_cont_dim + len(self.action_disc_dims)
 
-        #self.action_space = Box(low=np.array([-1.0, -1.0, -1.0]), high=np.array([1.0, 1.0, 1.0]))
+        #self.action_space = Box(low=np.array([-1.0, -1.0, -1.0]), high=np.array([1.0, 1.0, 1.0])) # viejo
         self.action_space = Dict({
             "cont": Box(low=np.array([-1.0, -1.0, -1.0]), high=np.array([1.0, 1.0, 1.0])), # not general but not mine
             "disc": MultiDiscrete(self.action_disc_dims)
@@ -439,6 +445,15 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             new_actions = actions
         return np.clip(new_actions, self.controls_min_values, self.controls_max_values)
 
+    def preprocess_discrete_actions(self, disc_actions):
+        if len(disc_actions) <= 0:
+            return disc_actions
+        curr_gear = self.state["actualGear"]
+        gear_shift = disc_actions[0]
+        if curr_gear <= 2 and gear_shift == GEAR_DOWNSHIFT: # dont go neutral or lower
+            disc_actions[0] = GEAR_KEEP
+        return disc_actions
+
     def inverse_preprocess_actions(self, prev_abs_actions, current_abs_actions):
         if self.use_relative_actions:
             # Use the adjusted rate limit's upper bound for each channel.
@@ -457,8 +472,10 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         # actions are deltas, update current controls
         # preprocess only continuous actions, then merge with discrete ones
+
         self.current_actions = self.preprocess_actions(actions[:self.action_cont_dim], self.current_actions)
-        self.actions = np.concatenate([self.current_actions, actions[self.action_cont_dim:]])
+        self.current_disc_actions = self.preprocess_discrete_actions(actions[self.action_cont_dim:])
+        self.actions = np.concatenate([self.current_actions, self.current_disc_actions])
 
         #
         gear_params = {"enable_gear_shift": False, "shift_up": False, "shift_down": False}
@@ -469,9 +486,9 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
                       f'suspicios actions: {actions}')
             gear_idx = int(actions[3])
             gear_params = {
-                0: {"enable_gear_shift": False},
-                1: {"enable_gear_shift": True, "shift_up": True, "shift_down": False},
-                2: {"enable_gear_shift": True, "shift_up": False, "shift_down": True}
+                GEAR_KEEP: {"enable_gear_shift": False},
+                GEAR_UPSHIFT: {"enable_gear_shift": True, "shift_up": True, "shift_down": False},
+                GEAR_DOWNSHIFT: {"enable_gear_shift": True, "shift_up": False, "shift_down": True}
             }[gear_idx]
 
         self.client.controls.set_controls(steer=self.actions[0],
@@ -654,8 +671,6 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         dist_to_border = state["dist_to_border"]
 
         r = speed
-        if speed < 0:
-            print(f'negative speed: {speed}')
         if self.use_reference_line_in_reward:
             r *= ( 1.0 - (np.abs( state["gap"]) / 12.00))
         r /= 300. # normalize
