@@ -272,7 +272,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.history_obs = []  # history of observations
         self.episodes_stats = []
         self.info = {}
-        self.state = {"actualGear": 1}
+        # self.state = {"actualGear": 1} ################################################################################
 
         self.total_steps = 0
         self.n_episodes = 0
@@ -474,13 +474,14 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         # preprocess only continuous actions, then merge with discrete ones
 
         self.current_actions = self.preprocess_actions(actions[:self.action_cont_dim], self.current_actions)
-        self.current_disc_actions = self.preprocess_discrete_actions(actions[self.action_cont_dim:])
-        self.actions = np.concatenate([self.current_actions, self.current_disc_actions])
+        #self.current_disc_actions = self.preprocess_discrete_actions(actions[self.action_cont_dim:])
+        #self.actions = np.concatenate([self.current_actions, self.current_disc_actions])
+        self.actions = self.current_actions
 
         #
         gear_params = {"enable_gear_shift": False, "shift_up": False, "shift_down": False}
 
-        if use_gear_shift:
+        if use_gear_shift and False: # TODO Angel BORRAR TEST IMPORTANTE
             if len(actions) < 4 or len(actions) > 5:
                 print(f'suspicious action len: {len(actions)}.\n'
                       f'suspicios actions: {actions}')
@@ -493,8 +494,8 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         self.client.controls.set_controls(steer=self.actions[0],
                                           acc=self.actions[1],
-                                          brake=self.actions[2],
-                                          ** gear_params)
+                                          brake=self.actions[2]
+                                          )
 
         self.client.respond_to_server()  # execute set actions
 

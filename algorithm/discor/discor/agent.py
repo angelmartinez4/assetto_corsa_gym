@@ -43,8 +43,11 @@ class Agent:
                                                  action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep, offline_buffer_size=offline_buffer_size)
         else:
             # Replay buffer with n-step return.
+            # self._replay_buffer = ReplayBuffer(memory_size=memory_size, state_shape=self._env.observation_space.shape,
+            #                                   action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep)
             self._replay_buffer = ReplayBuffer(memory_size=memory_size, state_shape=self._env.observation_space.shape,
-                                               action_shape=self._flattened_action_space_shape, gamma=self._algo.gamma, nstep=self._algo.nstep)
+                                               action_shape=(3,), gamma=self._algo.gamma,
+                                               nstep=self._algo.nstep)
 
         # Directory to log.
         self._log_dir = log_dir
@@ -157,24 +160,29 @@ class Agent:
                     else:
                         action = self._env.action_space_sample(True, self._algo._has_disc_actions)
                 else:
-                    action, _ = self._algo.explore(state)
-                    if self._algo._has_disc_actions:
+                    #action, _ = self._algo.explore(state) # @TODO Angel descomentar
+                    action, _ = self._algo.exploit(state) # borrar borrar
+                    if self._algo._has_disc_actions and False: # @TODO Angel borrar
                         if self._algo.has_heuristic_gear and self._steps < self._algo.heuristic_gear_steps:
                             gear_idx = self._env.action_total_dim - len(self._env.action_disc_dims)
                             action[gear_idx] = self._heuristic_gear()
                 action_perf.append(time.perf_counter() - start_profile)
 
                 # apply actions right away without blocking
-                self._env.set_actions(action, self._algo._has_disc_actions)
+                #self._env.set_actions(action, self._algo._has_disc_actions) # @TODO Angel descomentar
+
+                action = action[0:3] # BORRAR @TODO Angel
+                self._env.set_actions(action, False)
 
                 # update model
                 start_profile = time.perf_counter()
                 if self._steps >= self._start_steps:
-                    train_stats = self.update_model()
+                    #train_stats = self.update_model() # @TODO Angel testing HSAC con SAC pesos
+                    pass
                 update_model_perf.append(time.perf_counter() - start_profile)
 
                 # get observations
-                next_state, reward, done, info = self._env.step(action=None)  # action is already applied # TODO Angel
+                next_state, reward, done, info = self._env.step(action=None)
                 step_perf.append(time.perf_counter() - step_start_time)
                 step_start_time = time.perf_counter()
 

@@ -117,7 +117,7 @@ class GaussianHybridPolicy(BaseNetwork):
             input_dim=state_dim,
             output_dim = hidden_units[-1],
             hidden_units=hidden_units[:-1],
-            output_activation=None) # Trunk output is raw logits
+            output_activation=nn.ReLU())
 
         self.continuous_head = nn.Linear(hidden_units[-1], 2 * action_cont_dim) # * 2, mean/std for each cont feat
         self.discrete_heads = nn.ModuleList([

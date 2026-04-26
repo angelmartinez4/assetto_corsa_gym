@@ -117,7 +117,7 @@ class HSAC(Algorithm):
         state = torch.tensor(
             state[None, ...].copy(), dtype=torch.float, device=self._device)
         with torch.no_grad():
-            cont_actions, cont_entropies, _, disc_probs_list, _ = self._policy_net(state)
+            _, cont_entropies, cont_actions, disc_probs_list, _ = self._policy_net(state)
         cont_actions = cont_actions.cpu().numpy()[0]
         assert_action(cont_actions)
 
