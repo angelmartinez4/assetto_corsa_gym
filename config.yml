@@ -25,7 +25,7 @@ Agent:
   offline_buffer_size: 12_000_000
   use_offline_buffer: False # offline dual buffer
   update_interval: 1
-  start_steps: 200
+  start_steps: 2000
   log_interval: 10
   eval_interval: 0
   num_eval_episodes: 1
@@ -58,7 +58,8 @@ HSAC:
   heuristic_speed_gear_range: [[-1, -1], [-1, -1], [-1, 80], [50, 110],[70, 150], [90, 200], [110, 230], [140, 320]]
   load_from_sac: True
   load_sac_dir: "C:/Proyectos/assetto_corsa_gym/models/sac_1M_fix/model/final"
-  biased_exploration: False
+  biased_exploration: True
+  heuristic_discrete_logits: False
 
 DisCor:
   error_lr: 0.0003
@@ -68,7 +69,8 @@ DisCor:
 AssettoCorsa:
   action_cont_dim: 3
   action_disc_dims: [3]
-  action_disc_names: ['gear']
+  use_gear_in_reward: True
+  penalize_invalid_shift: True
   ego_sampling_freq: 25     # in Hz
   max_episode_py_time: 600. # in seconds
   gap_const: 12.

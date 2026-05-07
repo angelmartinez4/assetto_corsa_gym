@@ -21,6 +21,8 @@ import assetto_corsa_gym.AssettoCorsaEnv.sensors_ray_casting as sensors_ray_cast
 from assetto_corsa_gym.AssettoCorsaEnv.sensors_ray_casting import MAX_RAY_LEN
 from assetto_corsa_gym.AssettoCorsaEnv.gap import get_gap
 
+from assetto_corsa_gym.AssettoCorsaPlugin.plugins.acti.sim_info_acti import info as sim_information
+
 import torch
 
 import logging
@@ -248,6 +250,10 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.max_steer_rate = self.config.max_steer_rate
         self.use_obs_extra = self.config.use_obs_extra
         self.use_reference_line_in_reward = self.config.use_reference_line_in_reward
+        self.use_gear_in_reward = self.config.use_gear_in_reward
+        self.penalize_invalid_shift = self.config.penalize_invalid_shift
+        if self.use_gear_in_reward:
+            self._init_gear_rewards_params()  # init precalculated parameters for gear rewards
 
         # from the config
         self.use_ac_out_of_track = self.config.use_ac_out_of_track
@@ -474,14 +480,12 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         # preprocess only continuous actions, then merge with discrete ones
 
         self.current_actions = self.preprocess_actions(actions[:self.action_cont_dim], self.current_actions)
-        #self.current_disc_actions = self.preprocess_discrete_actions(actions[self.action_cont_dim:])
-        #self.actions = np.concatenate([self.current_actions, self.current_disc_actions])
-        self.actions = self.current_actions
+        self.current_disc_actions = self.preprocess_discrete_actions(actions[self.action_cont_dim:])
+        self.actions = np.concatenate([self.current_actions, self.current_disc_actions])
 
-        #
         gear_params = {"enable_gear_shift": False, "shift_up": False, "shift_down": False}
 
-        if use_gear_shift and False: # TODO Angel BORRAR TEST IMPORTANTE
+        if use_gear_shift:
             if len(actions) < 4 or len(actions) > 5:
                 print(f'suspicious action len: {len(actions)}.\n'
                       f'suspicios actions: {actions}')
@@ -494,7 +498,8 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         self.client.controls.set_controls(steer=self.actions[0],
                                           acc=self.actions[1],
-                                          brake=self.actions[2]
+                                          brake=self.actions[2],
+                                          ** gear_params
                                           )
 
         self.client.respond_to_server()  # execute set actions
@@ -673,7 +678,21 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         r = speed
         if self.use_reference_line_in_reward:
-            r *= ( 1.0 - (np.abs( state["gap"]) / 12.00))
+            coef_gap = ( 1.0 - (np.abs( state["gap"]) / 12.00))
+            r *= coef_gap
+        if self.use_gear_in_reward:
+            rpm = self.state["RPM"]
+            rpm_norm = rpm / self.maxRpm
+            coef_gear_reward = self._calculate_gear_reward(rpm_norm)
+            r *= coef_gear_reward
+            if rpm_norm > 0.95:
+                r -= 0.05
+            if self.penalize_invalid_shift:
+                if self.current_disc_actions == GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
+                    r -= 0.1
+        import random
+        if random.randint(0, 10) == 1:
+            print(f'speed reward: {speed}, coef_gap: {coef_gap}, coef_gear: {coef_gear_reward}')
         r /= 300. # normalize
 
         if self.penalize_actions_diff:
@@ -681,6 +700,36 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             r -= action_difference_penalty * self.penalize_actions_diff_coef
         r = r.reshape(-1)  # [N, 1] -> [N]
         return r
+
+    def _calculate_gear_reward(self, rpm_norm):
+        if rpm_norm <= self._peak:
+            a, b, c, d = self._L # left side of RPM curve
+            x = rpm_norm
+        else:
+            a, b, c, d = self._R # right side of RPM curve
+            x = rpm_norm - self._peak
+        return ((a * x + b) * x + c) * x + d
+
+    def _init_gear_rewards_params(self):
+        peak = 0.90
+        valley = 0.50
+        p2 = peak ** 2
+        b_l = 3 * (1 - valley) / p2
+        a_l = -2 * b_l / (3 * peak)
+        c_l = 0.0
+        d_l = valley
+        self._L = (a_l, b_l, c_l, d_l)
+
+        r = 1.0 - peak
+        r2 = r ** 2
+        b_r = 3 * (valley - 1) / r2
+        a_r = -2 * b_r / (3 * r)
+        c_r = 0.0
+        d_r = 1.0
+        self._R = (a_r, b_r, c_r, d_r)
+        self._peak = peak
+
+
 
     def recover_car(self):
         logger.info("Recover car")
@@ -698,6 +747,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         if self.n_episodes == 1:
             # get static info only once
             self.static_info = self.client.simulation_management.get_static_info()
+            self.maxRpm = sim_information.static.maxRpm
             self.track_length = self.static_info["TrackLength"]
             self.ac_mod_config = self.client.simulation_management.get_config()
             if verbose:

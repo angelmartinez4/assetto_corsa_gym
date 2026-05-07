@@ -21,7 +21,7 @@ class HSAC(Algorithm):
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
                  target_update_coef=0.005, log_interval=10, seed=0, use_heuristic_gear=False,
                  heuristic_gear_steps=0, heuristic_rpm_range=[1000, 5000], heuristic_speed_gear_range=None,
-                 load_from_sac=False, load_sac_dir=None, biased_exploration= False, biased_exploration_steps= 0):
+                 load_from_sac=False, load_sac_dir=None, biased_exploration=False, heuristic_discrete_logits=False):
         super().__init__(
             state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed, has_disc_actions=True)
         assert action_disc_dims is not None
@@ -31,10 +31,10 @@ class HSAC(Algorithm):
         self.heuristic_gear_steps = heuristic_gear_steps
         self.heuristic_rpm_range = heuristic_rpm_range
         self.heuristic_speed_gear_range = heuristic_speed_gear_range
-        self.load_from_sac=load_from_sac
+        self.load_from_sac = load_from_sac
         self.load_sac_dir = load_sac_dir
         self.biased_exploration = biased_exploration
-        self.biased_exploration_steps = biased_exploration_steps
+        self.heuristic_discrete_logits = heuristic_discrete_logits
 
         # Build networks.
         self._policy_net = GaussianHybridPolicy(
@@ -63,12 +63,13 @@ class HSAC(Algorithm):
         disable_gradients(self._target_q_net)
 
         # Optimizers.
+        #self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
         if not self.load_from_sac:
             self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
         else:
             self._policy_optim = Adam([
-                {'params': self._policy_net.net.parameters(), 'lr': policy_lr * 0.1},  # slow trunk
-                {'params': self._policy_net.continuous_head.parameters(), 'lr': policy_lr * 0.1},  # cont lento
+                {'params': self._policy_net.net.parameters(), 'lr': policy_lr * 0.00000000000001},  # slow trunk
+                {'params': self._policy_net.continuous_head.parameters(), 'lr': policy_lr * 0.00000000000001},  # cont slow
                 {'params': self._policy_net.discrete_heads.parameters(), 'lr': policy_lr},  # disc normal
             ])
         self._q_optim = Adam(self._online_q_net.parameters(), lr=q_lr)
@@ -96,6 +97,9 @@ class HSAC(Algorithm):
 
         if self.load_from_sac:
             self.load_cont_weights_from_sac()
+
+        if self.heuristic_discrete_logits:
+            self._policy_net.apply_heuristic_logits()
 
     def explore(self, state):
         state = torch.tensor(

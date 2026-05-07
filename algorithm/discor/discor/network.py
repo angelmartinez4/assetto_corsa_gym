@@ -125,6 +125,8 @@ class GaussianHybridPolicy(BaseNetwork):
         ])
 
         self.apply(initialize_weights_xavier)
+
+    def apply_heuristic_logits(self):
         for head in self.discrete_heads:
             nn.init.constant_(head.bias, 0.0)
             head.bias.data[0] = 2.0  # keep gear highest logit
