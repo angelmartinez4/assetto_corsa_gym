@@ -683,16 +683,21 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         if self.use_gear_in_reward:
             rpm = self.state["RPM"]
             rpm_norm = rpm / self.maxRpm
-            coef_gear_reward = self._calculate_gear_reward(rpm_norm)
+            rpm_norm = np.clip(rpm_norm, 0, 1) # so noise doesnt break gear_reward function
+            #coef_gear_reward = self._calculate_gear_reward_polynomial(rpm_norm)
+            target_rpm = 0.9
+            sigma = 0.15
+            if rpm_norm > target_rpm:
+                sigma = 0.05
+            base_reward_coef = 0.25
+            coef_gear_reward = (base_reward_coef + (1-base_reward_coef) *
+                                np.exp(-((rpm_norm - target_rpm)**2) / (2 * sigma ** 2)))
             r *= coef_gear_reward
-            if rpm_norm > 0.95:
-                r -= 0.05
             if self.penalize_invalid_shift:
                 if self.current_disc_actions == GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
-                    r -= 0.1
-        import random
-        if random.randint(0, 10) == 1:
-            print(f'speed reward: {speed}, coef_gap: {coef_gap}, coef_gear: {coef_gear_reward}')
+                    r -= 5_000
+                #elif self.current_actions == GEAR_UPSHIFT and rpm_norm < 0.6:
+                #    r *= 0.4
         r /= 300. # normalize
 
         if self.penalize_actions_diff:
@@ -701,7 +706,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         r = r.reshape(-1)  # [N, 1] -> [N]
         return r
 
-    def _calculate_gear_reward(self, rpm_norm):
+    def _calculate_gear_reward_polynomial(self, rpm_norm):
         if rpm_norm <= self._peak:
             a, b, c, d = self._L # left side of RPM curve
             x = rpm_norm
@@ -710,6 +715,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             x = rpm_norm - self._peak
         return ((a * x + b) * x + c) * x + d
 
+    # ax3 + bx2 + cx + d polynomial parameters for left (l) and right (r) piecewise function for gear reward
     def _init_gear_rewards_params(self):
         peak = 0.90
         valley = 0.50

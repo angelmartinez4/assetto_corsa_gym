@@ -59,7 +59,7 @@ HSAC:
   load_from_sac: True
   load_sac_dir: "C:/Proyectos/assetto_corsa_gym/models/sac_1M_fix/model/final"
   biased_exploration: True
-  heuristic_discrete_logits: False
+  heuristic_discrete_logits: True
 
 DisCor:
   error_lr: 0.0003
