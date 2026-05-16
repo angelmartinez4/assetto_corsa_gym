@@ -195,6 +195,8 @@ class StaticInfo(dict):
 
         self["autoShifterOn"] = info.physics.autoShifterOn
         self["penaltiesEnabled"] = info.static.penaltiesEnabled
+        self["maxRpm"] = info.static.maxRpm
+        self["maxPower"] = info.static.maxPower
 
         # Front left and right, rear right tires
         self['TyreContactPoint_FL'] = ac.getCarState(self.car_id, acsys.CS.TyreContactPoint, acsys.WHEELS.FL)
@@ -215,16 +217,23 @@ class StaticInfo(dict):
 
         # The following block works only if the static car info is included as explained above
         try:
-            s = 'content/cars/%s/ui/ui_car.json' % name
+            cur_dir = os.path.dirname(os.path.abspath(__file__))
+            ac_root = os.path.join(cur_dir, '..', '..', '..')
+            ac_root = os.path.normpath(ac_root)
+            #s = 'content/cars/%s/ui/ui_car.json' % name
+            s = os.path.join(ac_root, 'content', 'cars', name, 'ui', 'ui_car.json')
+            logger.info("calculated path: "+s)
             with open(s) as json_info:
-                    data = json.load(json_info)
+                data = json.load(json_info, strict=False)
+
+            self["powerCurve"] = [(int(p[0]), int(p[1])) for p in data['powerCurve']]
 
             self['CAR_MASS']    = int(data['specs']['weight'][:-2])
-            self['CAR_DIM_X']   = float(data['specs']['length'])
-            self['CAR_DIM_Y']   = float(data['specs']['height'])
-            self['CAR_DIM_Z']   = float(data['specs']['width'])
-        except:
-            logger.info("Cannot retrieve static data from ui_car.json")
+            #self['CAR_DIM_X']   = float(data['specs']['length'])
+            #self['CAR_DIM_Y']   = float(data['specs']['height'])
+            #self['CAR_DIM_Z']   = float(data['specs']['width'])
+        except Exception as e:
+            logger.info("Cannot retrieve static data from ui_car.json: "+str(e))
 
         if self.get("CAR_WHEELBASE", 0) != 0:
             self.done_static_info = True

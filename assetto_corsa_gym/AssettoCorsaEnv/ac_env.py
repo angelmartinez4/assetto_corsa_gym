@@ -21,8 +21,6 @@ import assetto_corsa_gym.AssettoCorsaEnv.sensors_ray_casting as sensors_ray_cast
 from assetto_corsa_gym.AssettoCorsaEnv.sensors_ray_casting import MAX_RAY_LEN
 from assetto_corsa_gym.AssettoCorsaEnv.gap import get_gap
 
-from assetto_corsa_gym.AssettoCorsaPlugin.plugins.acti.sim_info_acti import info as sim_information
-
 import torch
 
 import logging
@@ -753,7 +751,8 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         if self.n_episodes == 1:
             # get static info only once
             self.static_info = self.client.simulation_management.get_static_info()
-            self.maxRpm = sim_information.static.maxRpm
+            self.maxRpm = self.static_info["maxRpm"]
+            self.powerCurve = self.static_info["powerCurve"]
             self.track_length = self.static_info["TrackLength"]
             self.ac_mod_config = self.client.simulation_management.get_config()
             if verbose:
