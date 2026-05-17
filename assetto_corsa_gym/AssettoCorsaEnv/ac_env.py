@@ -50,6 +50,9 @@ GEAR_KEEP = 0
 GEAR_UPSHIFT = 1
 GEAR_DOWNSHIFT = 2
 
+UPSHIFT_RPM_FACTOR = 0.75
+DOWNSHIFT_RPM_FACTOR = 1/UPSHIFT_RPM_FACTOR
+
 def get_date_timestemp():
     return datetime.now().strftime('%Y%m%d_%H%M%S.%f')[:-3]
 
@@ -250,8 +253,10 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.use_reference_line_in_reward = self.config.use_reference_line_in_reward
         self.use_gear_in_reward = self.config.use_gear_in_reward
         self.penalize_invalid_shift = self.config.penalize_invalid_shift
+        self.predict_shift_rpm_reward = self.config.predict_shift_rpm_reward
+        self.use_power_curve = self.config.use_power_curve
         if self.use_gear_in_reward:
-            self._init_gear_rewards_params()  # init precalculated parameters for gear rewards
+            self._init_polynomial_gear_rewards_params()  # init precalculated parameters for gear rewards
 
         # from the config
         self.use_ac_out_of_track = self.config.use_ac_out_of_track
@@ -679,23 +684,21 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             coef_gap = ( 1.0 - (np.abs( state["gap"]) / 12.00))
             r *= coef_gap
         if self.use_gear_in_reward:
-            rpm = self.state["RPM"]
-            rpm_norm = rpm / self.maxRpm
+            rpm_norm = self.state["RPM"] / self.maxRpm
             rpm_norm = np.clip(rpm_norm, 0, 1) # so noise doesnt break gear_reward function
+            #if self.predict_shift_rpm_reward:
+                # rpm_norm *= self._adjust_rpm_gearshift(rpm_norm)
+            #if self.predict_shift_rpm_reward and rpm_norm > 1:
+            #    coef_gear_reward = self._calculate_gear_reward_sigmoid_overrev(rpm_norm)
             #coef_gear_reward = self._calculate_gear_reward_polynomial(rpm_norm)
-            target_rpm = 0.9
-            sigma = 0.15
-            if rpm_norm > target_rpm:
-                sigma = 0.05
-            base_reward_coef = 0.25
-            coef_gear_reward = (base_reward_coef + (1-base_reward_coef) *
-                                np.exp(-((rpm_norm - target_rpm)**2) / (2 * sigma ** 2)))
+            #coef_gear_reward = self._calculate_gear_reward_asymetric_gaussian(rpm_norm)
+            if self.use_power_curve:
+                coef_gear_reward = self._calculate_gear_reward_power_curve(rpm_norm)
+
             r *= coef_gear_reward
             if self.penalize_invalid_shift:
                 if self.current_disc_actions == GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
-                    r -= 5_000
-                #elif self.current_actions == GEAR_UPSHIFT and rpm_norm < 0.6:
-                #    r *= 0.4
+                    r -= 300
         r /= 300. # normalize
 
         if self.penalize_actions_diff:
@@ -703,6 +706,37 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             r -= action_difference_penalty * self.penalize_actions_diff_coef
         r = r.reshape(-1)  # [N, 1] -> [N]
         return r
+
+    # Interpolate current available power from RPM and rpm-to-power curve from static car file
+    # Note: it's not actual power but available, so it doesnt affect braking (so helps with engine braking too!)
+    def _calculate_gear_reward_power_curve(self, rpm_norm):
+        return np.interp(rpm_norm, self.normalizedPowerCurve[0,:], self.normalizedPowerCurve[1,:])
+
+    def _calculate_gear_reward_sigmoid_overrev(self, rpm_norm):
+        last_power = self.normalizedPowerCurve[1, -1]
+        sigma = 0.3
+        # sigmoid such that s(1) = last_power (continuous with power curve), goes to -1 as rpm increase
+        # and sigma controls "decreasing speed", lower sigma, higher downshift at high rpm penalizes
+        return -1 + 2 * (last_power + 1) / (1 + np.exp((x-1)/(2 * sigma ** 2)))
+
+    def _adjust_rpm_gearshift(self, rpm_norm):
+        if self.current_disc_actions == GEAR_KEEP:
+            return rpm_norm
+        if self.current_disc_actions == GEAR_DOWNSHIFT:
+            return rpm_norm * DOWNSHIFT_RPM_FACTOR
+        return rpm_norm * UPSHIFT_RPM_FACTOR
+
+    def _calculate_gear_reward_asymetric_gaussian(self, rpm_norm):
+        target_rpm = 0.9
+        sigma = 0.15
+        if rpm_norm > target_rpm:
+            sigma = 0.05
+        base_reward_coef = 0.25
+        coef_gear_reward = (base_reward_coef + (1 - base_reward_coef) *
+                            np.exp(-((rpm_norm - target_rpm) ** 2) / (2 * sigma ** 2)))
+        return coef_gear_reward
+
+
 
     def _calculate_gear_reward_polynomial(self, rpm_norm):
         if rpm_norm <= self._peak:
@@ -714,7 +748,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         return ((a * x + b) * x + c) * x + d
 
     # ax3 + bx2 + cx + d polynomial parameters for left (l) and right (r) piecewise function for gear reward
-    def _init_gear_rewards_params(self):
+    def _init_polynomial_gear_rewards_params(self):
         peak = 0.90
         valley = 0.50
         p2 = peak ** 2
@@ -752,7 +786,10 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             # get static info only once
             self.static_info = self.client.simulation_management.get_static_info()
             self.maxRpm = self.static_info["maxRpm"]
-            self.powerCurve = self.static_info["powerCurve"]
+            self.powerCurve = np.array(self.static_info["powerCurve"])
+            self.maxPower = self.static_info["maxPower"]
+            self.normalizedPowerCurve = np.array(  # normalize to [0,1] both RPM and power
+                [(rpm_pow[0]/self.maxRpm, rpm_pow[1]/self.maxPower) for rpm_pow in self.powerCurve]) # [rpm, pow] in 0,1
             self.track_length = self.static_info["TrackLength"]
             self.ac_mod_config = self.client.simulation_management.get_config()
             if verbose:

@@ -70,6 +70,8 @@ AssettoCorsa:
   action_cont_dim: 3
   action_disc_dims: [3]
   use_gear_in_reward: True
+  use_power_curve: True
+  predict_shift_rpm_reward: False
   penalize_invalid_shift: True
   ego_sampling_freq: 25     # in Hz
   max_episode_py_time: 600. # in seconds

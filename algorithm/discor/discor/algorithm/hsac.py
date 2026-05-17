@@ -354,7 +354,7 @@ class HSAC(Algorithm):
         for sac_key, sac_val in sac_policy_sd.items():
             if sac_key in hsac_policy_sd and hsac_policy_sd[sac_key].shape == sac_val.shape:
                 hsac_policy_sd[sac_key] = sac_val.clone()
-                print(f"[policy] {sac_key} → {sac_key}")
+                print(f"[policy] {sac_key} -> {sac_key}")
             elif sac_key in sac_last_keys:
                 target = 'continuous_head.weight' if sac_key.endswith('.weight') else 'continuous_head.bias'
                 if hsac_policy_sd[target].shape == sac_val.shape:
@@ -369,5 +369,5 @@ class HSAC(Algorithm):
             for sac_key, sac_val in sac_q_sd.items():
                 if sac_key in hsac_q_sd and hsac_q_sd[sac_key].shape == sac_val.shape:
                     hsac_q_sd[sac_key] = sac_val.clone()
-                    print(f"[{net_attr}] {sac_key} → {sac_key}")
+                    print(f"[{net_attr}] {sac_key} -> {sac_key}")
             getattr(self, net_attr).load_state_dict(hsac_q_sd)
