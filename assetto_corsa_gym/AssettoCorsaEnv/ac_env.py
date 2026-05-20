@@ -680,26 +680,30 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         dist_to_border = state["dist_to_border"]
 
         r = speed
+        counter_speed_rewards = 0
         if self.use_reference_line_in_reward:
             coef_gap = ( 1.0 - (np.abs( state["gap"]) / 12.00))
             r *= coef_gap
+            counter_speed_rewards += 1
         if self.use_gear_in_reward:
             rpm_norm = self.state["RPM"] / self.maxRpm
             rpm_norm = np.clip(rpm_norm, 0, 1) # so noise doesnt break gear_reward function
-            #if self.predict_shift_rpm_reward:
-                # rpm_norm *= self._adjust_rpm_gearshift(rpm_norm)
-            #if self.predict_shift_rpm_reward and rpm_norm > 1:
-            #    coef_gear_reward = self._calculate_gear_reward_sigmoid_overrev(rpm_norm)
+            if self.predict_shift_rpm_reward:
+                rpm_norm *= self._adjust_rpm_gearshift(rpm_norm)
+            coef_gear_reward = 0
+            if self.predict_shift_rpm_reward and rpm_norm > 1:
+                coef_gear_reward = self._calculate_gear_reward_sigmoid_overrev(rpm_norm)
             #coef_gear_reward = self._calculate_gear_reward_polynomial(rpm_norm)
             #coef_gear_reward = self._calculate_gear_reward_asymetric_gaussian(rpm_norm)
             if self.use_power_curve:
                 coef_gear_reward = self._calculate_gear_reward_power_curve(rpm_norm)
+                counter_speed_rewards += 1
 
-            r *= coef_gear_reward
+            r += speed * coef_gear_reward
             if self.penalize_invalid_shift:
                 if self.current_disc_actions == GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
                     r -= 300
-        r /= 300. # normalize
+        r /= (300. * counter_speed_rewards) # normalize
 
         if self.penalize_actions_diff:
             action_difference_penalty = np.linalg.norm(actions_diff, ord=2)
@@ -717,7 +721,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         sigma = 0.3
         # sigmoid such that s(1) = last_power (continuous with power curve), goes to -1 as rpm increase
         # and sigma controls "decreasing speed", lower sigma, higher downshift at high rpm penalizes
-        return -1 + 2 * (last_power + 1) / (1 + np.exp((x-1)/(2 * sigma ** 2)))
+        return -1 + 2 * (last_power + 1) / (1 + np.exp((rpm_norm-1)/(2 * sigma ** 2)))
 
     def _adjust_rpm_gearshift(self, rpm_norm):
         if self.current_disc_actions == GEAR_KEEP:

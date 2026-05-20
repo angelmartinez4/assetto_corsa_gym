@@ -72,7 +72,7 @@ AssettoCorsa:
   use_gear_in_reward: True
   use_power_curve: True
   predict_shift_rpm_reward: False
-  penalize_invalid_shift: True
+  penalize_invalid_shift: False # bad with SAC methods
   ego_sampling_freq: 25     # in Hz
   max_episode_py_time: 600. # in seconds
   gap_const: 12.
