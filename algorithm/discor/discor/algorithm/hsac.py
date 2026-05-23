@@ -21,7 +21,8 @@ class HSAC(Algorithm):
                  policy_hidden_units=[256, 256], q_hidden_units=[256, 256],
                  target_update_coef=0.005, log_interval=10, seed=0, use_heuristic_gear=False,
                  heuristic_gear_steps=0, heuristic_rpm_range=[1000, 5000], heuristic_speed_gear_range=None,
-                 load_from_sac=False, load_sac_dir=None, biased_exploration=False, heuristic_discrete_logits=False):
+                 load_from_sac=False, load_sac_dir=None, biased_exploration=False, heuristic_discrete_logits=False
+                 , steps_frozen_cont=0):
         super().__init__(
             state_dim, action_cont_dim, device, gamma, nstep, log_interval, seed, has_disc_actions=True)
         assert action_disc_dims is not None
@@ -35,6 +36,7 @@ class HSAC(Algorithm):
         self.load_sac_dir = load_sac_dir
         self.biased_exploration = biased_exploration
         self.heuristic_discrete_logits = heuristic_discrete_logits
+        self.steps_frozen_cont = steps_frozen_cont
 
         # Build networks.
         self._policy_net = GaussianHybridPolicy(
@@ -63,22 +65,14 @@ class HSAC(Algorithm):
         disable_gradients(self._target_q_net)
 
         # Optimizers.
-        #self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
-        if not self.load_from_sac:
-            self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
-        else:
-            self._policy_optim = Adam([
-                {'params': self._policy_net.net.parameters(), 'lr': policy_lr * 0.00000000000001},  # slow trunk
-                {'params': self._policy_net.continuous_head.parameters(), 'lr': policy_lr * 0.00000000000001},  # cont slow
-                {'params': self._policy_net.discrete_heads.parameters(), 'lr': policy_lr},  # disc normal
-            ])
+        self._policy_optim = Adam(self._policy_net.parameters(), lr=policy_lr)
         self._q_optim = Adam(self._online_q_net.parameters(), lr=q_lr)
 
         # Target entropy is -|A_c|. (continuous)
         self._target_entropy_cont = -float(self._action_cont_dim)
 
         # Target discrete entropy. Each head has a different one, initialized based on size
-        self._target_entropy_disc = torch.tensor([0.3 * torch.log(torch.tensor(float(k)))
+        self._target_entropy_disc = torch.tensor([0.05 * torch.log(torch.tensor(float(k)))
                                                  for k in self._action_disc_dims],
                                                  device=self._device)
 
@@ -100,6 +94,9 @@ class HSAC(Algorithm):
 
         if self.heuristic_discrete_logits:
             self._policy_net.apply_heuristic_logits()
+
+        if self._learning_steps > 0:
+            self._set_cont_frozen(True)
 
     def explore(self, state):
         state = torch.tensor(
@@ -139,6 +136,8 @@ class HSAC(Algorithm):
 
     def update_online_networks(self, batch, writer):
         self._learning_steps += 1
+        if self._learning_steps == self.steps_frozen_cont:
+            self._set_cont_frozen(False)
         stats = self.update_policy_and_entropy(batch, writer)
         self.update_q_functions(batch, writer)
         return stats
@@ -341,6 +340,12 @@ class HSAC(Algorithm):
         self._policy_net.load(os.path.join(load_dir, 'policy_net.pth'))
         self._online_q_net.load(os.path.join(load_dir, 'online_q_net.pth'))
         self._target_q_net.load(os.path.join(load_dir, 'target_q_net.pth'))
+
+    def _set_cont_frozen(self, frozen: bool): # freeze continuous layers, trunk and cont head
+        for param in self._policy_net.net.parameters():
+            param.requires_grad_(not frozen)
+        for param in self._policy_net.continuous_head.parameters():
+            param.requires_grad_(not frozen)
 
     def load_cont_weights_from_sac(self):
         sac_policy_sd = torch.load(os.path.join(self.load_sac_dir, 'policy_net.pth'), map_location=self._device)

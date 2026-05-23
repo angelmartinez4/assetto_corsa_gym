@@ -687,7 +687,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             counter_speed_rewards += 1
         if self.use_gear_in_reward:
             rpm_norm = self.state["RPM"] / self.maxRpm
-            rpm_norm = np.clip(rpm_norm, 0, 1) # so noise doesnt break gear_reward function
+            rpm_norm = np.clip(rpm_norm, 0, 1)  # so noise doesnt break gear_reward function
             if self.predict_shift_rpm_reward:
                 rpm_norm *= self._adjust_rpm_gearshift(rpm_norm)
             coef_gear_reward = 0

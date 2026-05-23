@@ -177,7 +177,7 @@ class HybridStateActionFunction(BaseNetwork): # Critic NN
             input_dim=state_dim+action_cont_dim, # Critic input: state and continuous actions. NOT discrete
             output_dim=hidden_units[-1],
             hidden_units=hidden_units[:-1],
-            output_activation=None) # Trunk output is raw logits
+            output_activation=nn.ReLU())
 
         self.discrete_q_heads = nn.ModuleList([
             nn.Linear(hidden_units[-1], dim) for dim in action_disc_dims
