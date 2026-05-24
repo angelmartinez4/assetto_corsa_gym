@@ -139,11 +139,12 @@ class Agent:
         ep_start_time = time.time()
         ep_stats = {}
         train_stats = None
+        last_train_stats = {}
 
         try:
             done = False
             step_perf, action_perf, update_model_perf = [], [], []
-            state = self._env.reset()
+            state = self._env.reset(self._algo._has_disc_actions)
             step_start_time = time.perf_counter()
 
             while (not done):
@@ -169,7 +170,9 @@ class Agent:
                 # update model
                 start_profile = time.perf_counter()
                 if self._steps >= self._start_steps:
-                    train_stats = self.update_model()
+                    new_train_stats = self.update_model()
+                    if new_train_stats is not None:
+                        last_train_stats = new_train_stats
                 update_model_perf.append(time.perf_counter() - start_profile)
 
                 # get observations
@@ -236,8 +239,8 @@ class Agent:
 
         eval_metrics = self.common_metrics()
         eval_metrics.update(ep_stats)
-        if train_stats:
-            eval_metrics.update(train_stats)
+        if last_train_stats:
+            eval_metrics.update(last_train_stats)
         eval_metrics["update_model_perf_mean"] = np.array(update_model_perf).mean()
         eval_metrics["update_model_perf_max"] = np.array(update_model_perf).max()
         eval_metrics["update_model_perf_std"] = np.array(update_model_perf).std()
@@ -288,7 +291,7 @@ class Agent:
         try:
             total_return = 0.0
             for _ in range(self._num_eval_episodes):
-                state = self._test_env.reset()
+                state = self._test_env.reset(self._algo._has_disc_actions)
                 episode_return = 0.0
                 done = False
 
@@ -327,7 +330,7 @@ class Agent:
 
         env_data = DataLoader(env, trajs_path)
         for ep in tqdm(range(env_data.trajectories_count)[:]):
-            state = env_data.reset()
+            state = env_data.reset(self._algo._has_disc_actions)
 
             total_added_episodes += 1
             for i in range(len(env_data.trajectory) - 1):

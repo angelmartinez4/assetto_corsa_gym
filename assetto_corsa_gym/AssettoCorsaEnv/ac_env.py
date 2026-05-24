@@ -482,7 +482,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         # actions are deltas, update current controls
         # preprocess only continuous actions, then merge with discrete ones
 
-        self.current_actions = self.preprocess_actions(actions[:self.action_cont_dim], self.current_actions)
+        self.current_actions = self.preprocess_actions(actions[:self.action_cont_dim], self.current_actions[:self.action_cont_dim])
         self.current_disc_actions = self.preprocess_discrete_actions(actions[self.action_cont_dim:])
         self.actions = np.concatenate([self.current_actions, self.current_disc_actions])
 
@@ -517,7 +517,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.total_steps += 1
 
         if action is not None:
-            self.set_actions(action, use_gear_shift=False)
+            self.set_actions(action, use_gear_shift=(len(action) > 3))
 
         state = self.client.step_sim()
         state["timestamp_env"] = time.perf_counter()
@@ -779,7 +779,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         self.client.respond_to_server()
         self.client.simulation_management.send_reset()
 
-    def reset(self, seed=None, verbose=False):
+    def reset(self, use_gear=False, seed=None, verbose=False):
         self.end_of_episode_stats()
         self.stats_saved = False
 
@@ -834,6 +834,9 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             obs, _, _, _ = self.step(self.start_actions)
 
         self.states = []
+        if use_gear:  # start in 1st
+            self.start_actions = np.concatenate([self.start_actions, np.array([GEAR_UPSHIFT])])
+            self.current_actions = self.start_actions
         obs, _, _, info = self.step(self.start_actions)
         self.info = info
 

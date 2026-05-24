@@ -72,7 +72,7 @@ class HSAC(Algorithm):
         self._target_entropy_cont = -float(self._action_cont_dim)
 
         # Target discrete entropy. Each head has a different one, initialized based on size
-        self._target_entropy_disc = torch.tensor([0.05 * torch.log(torch.tensor(float(k)))
+        self._target_entropy_disc = torch.tensor([0.2 * torch.log(torch.tensor(float(k)))
                                                  for k in self._action_disc_dims],
                                                  device=self._device)
 
@@ -95,8 +95,10 @@ class HSAC(Algorithm):
         if self.heuristic_discrete_logits:
             self._policy_net.apply_heuristic_logits()
 
-        if self._learning_steps > 0:
+        if self.steps_frozen_cont > 0:
             self._set_cont_frozen(True)
+        else:
+            self._set_cont_frozen(False)
 
     def explore(self, state):
         state = torch.tensor(
@@ -138,6 +140,7 @@ class HSAC(Algorithm):
         self._learning_steps += 1
         if self._learning_steps == self.steps_frozen_cont:
             self._set_cont_frozen(False)
+            logger.info(f"Continuous unfrozen at step {self._learning_steps}")
         stats = self.update_policy_and_entropy(batch, writer)
         self.update_q_functions(batch, writer)
         return stats
@@ -154,7 +157,8 @@ class HSAC(Algorithm):
         entropy_loss_disc = torch.zeros(1, device=self._device)
         if self.update_entropy:
             entropy_loss_cont, entropy_loss_disc = self.calc_entropy_loss(cont_entropies, disc_entropies_list)
-            update_params(self._alpha_cont_optim, entropy_loss_cont)
+            if not self._cont_frozen:  # update alpha_cont only if not frozen
+                update_params(self._alpha_cont_optim, entropy_loss_cont)
             update_params(self._alpha_disc_optim, entropy_loss_disc)
             entropy_loss_cont = entropy_loss_cont.detach().item()
             entropy_loss_disc = entropy_loss_disc.detach().item()
@@ -164,35 +168,25 @@ class HSAC(Algorithm):
         # calculate mean for logging, since disc_entropies is not a tensor
         mean_disc_entropy = torch.stack(disc_entropies_list).mean().item()
 
+        stats = {
+            "policy_loss": policy_loss.detach().item(),
+            "entropy_loss_cont": entropy_loss_cont,
+            "entropy_loss_disc": entropy_loss_disc,
+            "alpha_cont": self._alpha_cont.item(),
+            "alpha_disc": self._alpha_disc.item(),
+            "entropy_cont": cont_entropies.detach().mean().item(),
+            "entropy_disc": mean_disc_entropy
+        }
         if self._learning_steps % self._log_interval == 0:
-            writer.add_scalar(
-                'loss/policy', policy_loss.detach().item(),
-                self._learning_steps)
-            writer.add_scalar(
-                'loss/entropy_cont', entropy_loss_cont,
-                self._learning_steps)
-            writer.add_scalar(
-                'loss/entropy_disc', entropy_loss_disc,
-                self._learning_steps)
-            writer.add_scalar(
-                'stats/alpha_cont', self._alpha_cont.item(),
-                self._learning_steps)
-            writer.add_scalar(
-                'stats/alpha_disc', self._alpha_disc.item(),
-                self._learning_steps)
-            writer.add_scalar(
-                'stats/entropy_cont', cont_entropies.detach().mean().item(),
-                self._learning_steps)
-            writer.add_scalar(
-                'stats/entropy_disc', mean_disc_entropy, self._learning_steps)
+            writer.add_scalar('loss/policy', stats['policy_loss'], self._learning_steps)
+            writer.add_scalar('loss/entropy_cont', stats['entropy_loss_cont'], self._learning_steps)
+            writer.add_scalar('loss/entropy_disc', stats['entropy_loss_disc'], self._learning_steps)
+            writer.add_scalar('stats/alpha_cont', stats['alpha_cont'], self._learning_steps)
+            writer.add_scalar('stats/alpha_disc', stats['alpha_disc'], self._learning_steps)
+            writer.add_scalar('stats/entropy_cont', stats['entropy_cont'], self._learning_steps)
+            writer.add_scalar('stats/entropy_disc', stats['entropy_disc'], self._learning_steps)
 
-            return {"policy_loss": policy_loss.detach().item(),
-                    "entropy_loss_cont": entropy_loss_cont,
-                    "entropy_loss_disc": entropy_loss_disc,
-                    "alpha_cont": self._alpha_cont.item(),
-                    "alpha_disc": self._alpha_disc.item(),
-                    "entropy_cont": cont_entropies.detach().mean().item(),
-                    "entropy_disc": mean_disc_entropy}
+            return stats
 
     def calc_policy_loss(self, states):
         # Resample actions to calculate expectations of Q.
@@ -342,10 +336,12 @@ class HSAC(Algorithm):
         self._target_q_net.load(os.path.join(load_dir, 'target_q_net.pth'))
 
     def _set_cont_frozen(self, frozen: bool): # freeze continuous layers, trunk and cont head
+        self._cont_frozen = frozen
         for param in self._policy_net.net.parameters():
             param.requires_grad_(not frozen)
         for param in self._policy_net.continuous_head.parameters():
             param.requires_grad_(not frozen)
+        self._log_alpha_cont.requires_grad(not frozen)
 
     def load_cont_weights_from_sac(self):
         sac_policy_sd = torch.load(os.path.join(self.load_sac_dir, 'policy_net.pth'), map_location=self._device)
