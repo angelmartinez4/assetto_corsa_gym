@@ -60,7 +60,7 @@ HSAC:
   load_sac_dir: "C:/Proyectos/assetto_corsa_gym/models/sac_1M_fix/model/final"
   biased_exploration: True
   heuristic_discrete_logits: True
-  steps_frozen_cont: 200_000
+  steps_frozen_cont: 50_000
 
 DisCor:
   error_lr: 0.0003

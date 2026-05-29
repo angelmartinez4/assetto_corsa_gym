@@ -689,16 +689,16 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             rpm_norm = self.state["RPM"] / self.maxRpm
             rpm_norm = np.clip(rpm_norm, 0, 1)  # so noise doesnt break gear_reward function
             if self.predict_shift_rpm_reward:
-                rpm_norm *= self._adjust_rpm_gearshift(rpm_norm)
+                rpm_norm *= self._adjust_rpm_gearshift()
             coef_gear_reward = 0
             if self.predict_shift_rpm_reward and rpm_norm > 1:
                 coef_gear_reward = self._calculate_gear_reward_sigmoid_overrev(rpm_norm)
+            elif self.use_power_curve:
+                coef_gear_reward = self._calculate_gear_reward_power_curve(rpm_norm)
             #coef_gear_reward = self._calculate_gear_reward_polynomial(rpm_norm)
             #coef_gear_reward = self._calculate_gear_reward_asymetric_gaussian(rpm_norm)
-            if self.use_power_curve:
-                coef_gear_reward = self._calculate_gear_reward_power_curve(rpm_norm)
-                counter_speed_rewards += 1
 
+            counter_speed_rewards += 1
             r += speed * coef_gear_reward
             if self.penalize_invalid_shift:
                 if self.current_disc_actions == GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
@@ -718,17 +718,17 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
     def _calculate_gear_reward_sigmoid_overrev(self, rpm_norm):
         last_power = self.normalizedPowerCurve[1, -1]
-        sigma = 0.3
+        sigma = 0.15
         # sigmoid such that s(1) = last_power (continuous with power curve), goes to -1 as rpm increase
         # and sigma controls "decreasing speed", lower sigma, higher downshift at high rpm penalizes
         return -1 + 2 * (last_power + 1) / (1 + np.exp((rpm_norm-1)/(2 * sigma ** 2)))
 
-    def _adjust_rpm_gearshift(self, rpm_norm):
+    def _adjust_rpm_gearshift(self):
         if self.current_disc_actions == GEAR_KEEP:
-            return rpm_norm
+            return 1
         if self.current_disc_actions == GEAR_DOWNSHIFT:
-            return rpm_norm * DOWNSHIFT_RPM_FACTOR
-        return rpm_norm * UPSHIFT_RPM_FACTOR
+            return DOWNSHIFT_RPM_FACTOR
+        return UPSHIFT_RPM_FACTOR
 
     def _calculate_gear_reward_asymetric_gaussian(self, rpm_norm):
         target_rpm = 0.9

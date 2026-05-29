@@ -157,8 +157,7 @@ class HSAC(Algorithm):
         entropy_loss_disc = torch.zeros(1, device=self._device)
         if self.update_entropy:
             entropy_loss_cont, entropy_loss_disc = self.calc_entropy_loss(cont_entropies, disc_entropies_list)
-            if not self._cont_frozen:  # update alpha_cont only if not frozen
-                update_params(self._alpha_cont_optim, entropy_loss_cont)
+            update_params(self._alpha_cont_optim, entropy_loss_cont)
             update_params(self._alpha_disc_optim, entropy_loss_disc)
             entropy_loss_cont = entropy_loss_cont.detach().item()
             entropy_loss_disc = entropy_loss_disc.detach().item()
@@ -336,12 +335,10 @@ class HSAC(Algorithm):
         self._target_q_net.load(os.path.join(load_dir, 'target_q_net.pth'))
 
     def _set_cont_frozen(self, frozen: bool): # freeze continuous layers, trunk and cont head
-        self._cont_frozen = frozen
         for param in self._policy_net.net.parameters():
             param.requires_grad_(not frozen)
         for param in self._policy_net.continuous_head.parameters():
             param.requires_grad_(not frozen)
-        self._log_alpha_cont.requires_grad(not frozen)
 
     def load_cont_weights_from_sac(self):
         sac_policy_sd = torch.load(os.path.join(self.load_sac_dir, 'policy_net.pth'), map_location=self._device)
