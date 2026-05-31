@@ -9,6 +9,7 @@ from tqdm import tqdm
 from algorithm.discor.discor.replay_buffer import ReplayBuffer, EnsembleBuffer
 from algorithm.discor.discor.utils import RunningMeanStats
 from assetto_corsa_gym.AssettoCorsaEnv.data_loader import DataLoader
+from assetto_corsa_gym.AssettoCorsaEnv.ac_env import Gear, GearAct
 
 import logging
 logger = logging.getLogger(__name__)
@@ -271,19 +272,20 @@ class Agent:
         gear_speed_bounds = speed_range[curr_gear]
         speed_downshift, speed_upshit = gear_speed_bounds[0], gear_speed_bounds[1]
         if speed < speed_downshift:
-            return 2  # downshift
+            return GearAct.GEAR_DOWNSHIFT  # downshift
         if speed > speed_upshit:
-            return 1  # upshift
-        return 0  # no shift
+            return GearAct.GEAR_UPSHIFT  # upshift
+        return GearAct.GEAR_KEEP  # no shift
 
     def _biased_exploration_sample(self):
-        steer = np.random.uniform(-0.5, 0.5)
-        acc = np.random.uniform(-0.4, 0.5)  # gas
-        brake = np.random.uniform(-0.3, 0.2)  # low brake
+        steer = np.random.uniform(-0.2, 0.2)
+        acc = np.random.uniform(-0.4, 0.45)  # gas
+        brake = np.random.uniform(-0.3, 0.25)  # low brake
         cont = np.array([steer, acc, brake])
 
         if self._algo._has_disc_actions:
-            disc = np.array([1]) if self._env.state["actualGear"] <= 1 else np.array([0])
+            # disc = np.array([1]) if self._env.state["actualGear"] <= 1 else np.array([0])
+            disc = np.array([self._heuristic_gear()])
             return np.concatenate([cont, disc])
         return cont
 

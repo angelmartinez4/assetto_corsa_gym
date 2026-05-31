@@ -1,5 +1,7 @@
 import os
 import sys
+from enum import Enum, IntEnum
+
 import numpy as np
 import pandas as pd
 import pickle
@@ -45,13 +47,29 @@ TERMINAL_JUDGE_TIMEOUT = 10.       # If after this number of seconds still no pr
 
 TOP_SPEED_MS = 80.
 
-# gear constants
-GEAR_KEEP = 0
-GEAR_UPSHIFT = 1
-GEAR_DOWNSHIFT = 2
+
+#GEAR_KEEP = 0
+#GEAR_UPSHIFT = 1
+#GEAR_DOWNSHIFT = 2
 
 UPSHIFT_RPM_FACTOR = 0.75
 DOWNSHIFT_RPM_FACTOR = 1/UPSHIFT_RPM_FACTOR
+
+# gear constants
+class GearAct(IntEnum):
+    GEAR_KEEP = 0
+    GEAR_UPSHIFT = 1
+    GEAR_DOWNSHIFT = 2
+
+class Gear(IntEnum):
+    GEAR_REVERSE = 0
+    GEAR_NEUTRAL = 1
+    GEAR_FIRST = 2
+    GEAR_SECOND = 3
+    GEAR_THIRD = 4
+    GEAR_FOUR = 5
+    GEAR_FIVE = 6
+    GEAR_SIX = 7
 
 def get_date_timestemp():
     return datetime.now().strftime('%Y%m%d_%H%M%S.%f')[:-3]
@@ -459,8 +477,8 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             return disc_actions
         curr_gear = self.state["actualGear"]
         gear_shift = disc_actions[0]
-        if curr_gear <= 2 and gear_shift == GEAR_DOWNSHIFT: # dont go neutral or lower
-            disc_actions[0] = GEAR_KEEP
+        if curr_gear <= Gear.GEAR_FIRST and gear_shift == GearAct.GEAR_DOWNSHIFT: # dont go neutral or lower
+            disc_actions[0] = GearAct.GEAR_KEEP
         return disc_actions
 
     def inverse_preprocess_actions(self, prev_abs_actions, current_abs_actions):
@@ -494,9 +512,9 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
                       f'suspicios actions: {actions}')
             gear_idx = int(actions[3])
             gear_params = {
-                GEAR_KEEP: {"enable_gear_shift": False},
-                GEAR_UPSHIFT: {"enable_gear_shift": True, "shift_up": True, "shift_down": False},
-                GEAR_DOWNSHIFT: {"enable_gear_shift": True, "shift_up": False, "shift_down": True}
+                GearAct.GEAR_KEEP: {"enable_gear_shift": False},
+                GearAct.GEAR_UPSHIFT: {"enable_gear_shift": True, "shift_up": True, "shift_down": False},
+                GearAct.GEAR_DOWNSHIFT: {"enable_gear_shift": True, "shift_up": False, "shift_down": True}
             }[gear_idx]
 
         self.client.controls.set_controls(steer=self.actions[0],
@@ -701,7 +719,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
             counter_speed_rewards += 1
             r += speed * coef_gear_reward
             if self.penalize_invalid_shift:
-                if self.current_disc_actions == GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
+                if self.current_disc_actions == GearAct.GEAR_DOWNSHIFT and rpm_norm > 0.8: # downshift prevention activated
                     r -= 300
         r /= (300. * counter_speed_rewards) # normalize
 
@@ -724,9 +742,9 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         return -1 + 2 * (last_power + 1) / (1 + np.exp((rpm_norm-1)/(2 * sigma ** 2)))
 
     def _adjust_rpm_gearshift(self):
-        if self.current_disc_actions == GEAR_KEEP:
+        if self.current_disc_actions == GearAct.GEAR_KEEP:
             return 1
-        if self.current_disc_actions == GEAR_DOWNSHIFT:
+        if self.current_disc_actions == GearAct.GEAR_DOWNSHIFT:
             return DOWNSHIFT_RPM_FACTOR
         return UPSHIFT_RPM_FACTOR
 
@@ -835,7 +853,7 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
 
         self.states = []
         if use_gear:  # start in 1st
-            self.start_actions = np.concatenate([self.start_actions, np.array([GEAR_UPSHIFT])])
+            self.start_actions = np.concatenate([self.start_actions, np.array([GearAct.GEAR_UPSHIFT])])
             self.current_actions = self.start_actions
         obs, _, _, info = self.step(self.start_actions)
         self.info = info

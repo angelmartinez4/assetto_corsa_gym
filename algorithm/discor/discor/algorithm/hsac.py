@@ -185,7 +185,7 @@ class HSAC(Algorithm):
             writer.add_scalar('stats/entropy_cont', stats['entropy_cont'], self._learning_steps)
             writer.add_scalar('stats/entropy_disc', stats['entropy_disc'], self._learning_steps)
 
-            return stats
+        return stats
 
     def calc_policy_loss(self, states):
         # Resample actions to calculate expectations of Q.

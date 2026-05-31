@@ -19,7 +19,7 @@ action_dim: null  # placeholder
 steps: null # placeholder
 
 Agent:
-  num_steps: 1_000_000
+  num_steps: 3_000_000
   batch_size: 128
   memory_size: 8_000_000
   offline_buffer_size: 12_000_000
@@ -57,10 +57,10 @@ HSAC:
   # for each gear (0 reverse, 1 neutral...), lower and upper speed range to shift down/up
   heuristic_speed_gear_range: [[-1, -1], [-1, -1], [-1, 80], [50, 110],[70, 150], [90, 200], [110, 230], [140, 320]]
   load_from_sac: True
-  load_sac_dir: "C:/Proyectos/assetto_corsa_gym/models/sac_1M_fix/model/final"
+  load_sac_dir: "models/sac_1M_fix/model/final"
   biased_exploration: True
   heuristic_discrete_logits: True
-  steps_frozen_cont: 50_000
+  steps_frozen_cont: 100_000
 
 DisCor:
   error_lr: 0.0003
@@ -70,9 +70,9 @@ DisCor:
 AssettoCorsa:
   action_cont_dim: 3
   action_disc_dims: [3]
-  use_gear_in_reward: True
-  use_power_curve: True
-  predict_shift_rpm_reward: True
+  use_gear_in_reward: False
+  use_power_curve: False
+  predict_shift_rpm_reward: False
   penalize_invalid_shift: False # bad with SAC methods
   ego_sampling_freq: 25     # in Hz
   max_episode_py_time: 600. # in seconds
