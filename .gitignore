@@ -62,3 +62,10 @@ MUJOCO_LOG.TXT
 output
 outputs
 assetto_corsa_gym.code-workspace
+datasets/*
+*.pkl
+*.ld
+*.ldx
+*.id
+*.idx
+

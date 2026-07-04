@@ -36,6 +36,7 @@ ks_barcelona-layout_gp:
     - {id: 20240426_M,                  type: human,  auto_shift: True,   ff: True,  data_type: motec}
     - {id: 20240426_XX,                 type: human,  auto_shift: True,   ff: True,  data_type: motec}
     - {id: 20240515_NiM,                type: human,  auto_shift: True,   ff: True,  data_type: motec}
+    - {id: 20260704_Angel_1,            type: human,  auto_shift: False,  ff: True,  data_type: motec}
 
   dallara_f317:
     # models
@@ -92,7 +93,8 @@ ks_red_bull_ring-layout_gp:
     - {id: 20240424_KW,                 type: human,  auto_shift: True,   ff: True,  data_type: motec}
     - {id: 20240425_RRK,                type: human,  auto_shift: True,   ff: True,  data_type: motec}
     - {id: 20240426_AB,                 type: human,  auto_shift: True,   ff: True,  data_type: motec}
-    - {id: 20240426_NiM,                type: human,  auto_shift: False,   ff: True,  data_type: motec}
+    - {id: 20240426_NiM,                type: human,  auto_shift: False,  ff: True,  data_type: motec}
+    - {id: 20260704_Angel,              type: human,  auto_shift: False,  ff: True,  data_type: motec}
 
   dallara_f317:
     # models

@@ -19,13 +19,13 @@ action_dim: null  # placeholder
 steps: null # placeholder
 
 Agent:
-  num_steps: 3_000_000
+  num_steps: 1_000_000
   batch_size: 128
-  memory_size: 8_000_000
-  offline_buffer_size: 12_000_000
-  use_offline_buffer: False # offline dual buffer
+  memory_size: 3_000_000
+  offline_buffer_size: 1_000_000
+  use_offline_buffer: True # offline dual buffer
   update_interval: 1
-  start_steps: 2000
+  start_steps: 2_000
   log_interval: 10
   eval_interval: 0
   num_eval_episodes: 1
@@ -56,11 +56,11 @@ HSAC:
   heuristic_gear_steps: 2_000_000
   # for each gear (0 reverse, 1 neutral...), lower and upper speed range to shift down/up
   heuristic_speed_gear_range: [[-1, -1], [-1, -1], [-1, 80], [50, 110],[70, 150], [90, 200], [110, 230], [140, 320]]
-  load_from_sac: True
-  load_sac_dir: "models/sac_1M_fix/model/final"
+  load_from_sac: False
+  load_sac_dir: "models/sac_1M_este_pc/model/final"
   biased_exploration: True
   heuristic_discrete_logits: True
-  steps_frozen_cont: 100_000
+  steps_frozen_cont: 100_000  # only freeze cont if load_from_sac
 
 DisCor:
   error_lr: 0.0003

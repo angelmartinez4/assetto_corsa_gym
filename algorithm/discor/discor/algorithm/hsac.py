@@ -95,7 +95,7 @@ class HSAC(Algorithm):
         if self.heuristic_discrete_logits:
             self._policy_net.apply_heuristic_logits()
 
-        if self.steps_frozen_cont > 0:
+        if self.load_from_sac and self.steps_frozen_cont > 0:
             self._set_cont_frozen(True)
         else:
             self._set_cont_frozen(False)
@@ -357,7 +357,7 @@ class HSAC(Algorithm):
                 target = 'continuous_head.weight' if sac_key.endswith('.weight') else 'continuous_head.bias'
                 if hsac_policy_sd[target].shape == sac_val.shape:
                     hsac_policy_sd[target] = sac_val.clone()
-                    print(f"[policy] {sac_key} → {target}")
+                    print(f"[policy] {sac_key} -> {target}")
 
         self._policy_net.load_state_dict(hsac_policy_sd)
 

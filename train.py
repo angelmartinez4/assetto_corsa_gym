@@ -111,7 +111,7 @@ def main():
                   device=device, seed=config.seed, **config.Agent, wandb_logger=wandb_logger)
 
     if not args.test and config.load_offline_data:
-        data_config_file = os.path.abspath(r"./ac_offline_train_paths.yml")
+        data_config_file = os.path.abspath(r"./ac_offline_train_paths_gt3.yml")
         logger.info("Loading offline dataset...")
         assert config.dataset_path, "dataset_path not set in config"
         dataset_path = Path(config.dataset_path + os.sep)

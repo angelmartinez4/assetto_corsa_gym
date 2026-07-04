@@ -332,7 +332,7 @@ class Agent:
 
         env_data = DataLoader(env, trajs_path)
         for ep in tqdm(range(env_data.trajectories_count)[:]):
-            state = env_data.reset(self._algo._has_disc_actions)
+            state = env_data.reset()
 
             total_added_episodes += 1
             for i in range(len(env_data.trajectory) - 1):

@@ -10,6 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from assetto_corsa_gym.AssettoCorsaEnv.brake_map import BrakeMap
+from assetto_corsa_gym.AssettoCorsaEnv.ac_env import Gear, GearAct
 
 def read_yml(f):
     with open(f, 'r') as file:
@@ -41,6 +42,9 @@ class DataLoader():
         brake_map_file = Path(env.ac_configs_path) / "cars" / env.config.car / 'brake_map.csv'
         self.brake_map = BrakeMap.load(brake_map_file)
         self.steer_max = env.max_steer_deg
+
+        # last valid gear. since shifting goes through neutral
+        self.last_valid_gear = Gear.GEAR_FIRST
 
     def get_actions_from_state(self, state):
         steer = state["steerAngle"] / self.steer_max
@@ -81,12 +85,19 @@ class DataLoader():
         state = self.trajectory[self.current_step]
         history = self.trajectory[:self.current_step] # get the history seen so far
         current_abs_actions = self.get_actions_from_state(state)
+        current_gear = state["actualGear"]
 
         if self.current_step == 0:
             self.prev_abs_actions = current_abs_actions
+            self.last_valid_gear = current_gear
 
         actions = self.env.inverse_preprocess_actions(self.prev_abs_actions, current_abs_actions)
         self.prev_abs_actions = current_abs_actions
+
+        action_gear = self.env.inverse_preprocess_discrete_actions(current_gear, self.last_valid_gear)
+
+        if current_gear >= Gear.GEAR_FIRST:  # down/upshifting goes through neutral, filter neutral
+            self.last_valid_gear = current_gear
 
         # abs values or relative
         self.current_actions = np.array([current_abs_actions[0],
@@ -94,7 +105,9 @@ class DataLoader():
                                          current_abs_actions[2]], dtype='float32')
         self.action = np.array( [actions[0],
                                  actions[1],
-                                 actions[2]], dtype='float32')
+                                 actions[2],
+                                 action_gear],
+                                 dtype='float32')
 
         self.state = state
         # re build the observations and the reward using the current environment settings
