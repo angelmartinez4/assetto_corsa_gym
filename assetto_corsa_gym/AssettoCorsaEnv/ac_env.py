@@ -490,17 +490,26 @@ class AssettoCorsaEnv(Env, gym_utils.EzPickle):
         else:
             return np.clip(current_abs_actions, self.controls_min_values, self.controls_max_values)
 
-    def inverse_preprocess_discrete_actions(self, current_gear, last_valid_gear):
-        if current_gear == last_valid_gear:  # no gear change in data
+    def inverse_preprocess_discrete_actions(self, current_gear, next_gear, trajectory, current_step):
+        if current_gear == next_gear or current_gear <= Gear.GEAR_NEUTRAL:
             return GearAct.GEAR_KEEP
-        # upshift/downshift through neutral. If a driver did 1st -> neutral, we can ignore it and keep 1st.
-        # the objective is to avoid downshifting when, after any shift, it goes through neutral for a few frames.
-        if current_gear <= Gear.GEAR_NEUTRAL:
+        elif next_gear == Gear.GEAR_NEUTRAL:  # current not neutral, next is neutral
+            idx = current_step + 1
+            while idx < len(trajectory) and trajectory[idx]["actualGear"] == Gear.GEAR_NEUTRAL:
+                idx += 1
+            if idx == len(trajectory): # check if out of bounds (episode ends)
+                return GearAct.GEAR_KEEP
+            return self.select_gear_change(current_gear, trajectory[idx]["actualGear"])
+        else:
+            return self.select_gear_change(current_gear, next_gear)
+
+    def select_gear_change(self, current_gear, next_gear):
+        if current_gear == next_gear:
             return GearAct.GEAR_KEEP
-        if current_gear > last_valid_gear:
-            return GearAct.GEAR_UPSHIFT
-        if current_gear < last_valid_gear:
+        if current_gear > next_gear:
             return GearAct.GEAR_DOWNSHIFT
+        if current_gear < next_gear:
+            return GearAct.GEAR_UPSHIFT
 
     def set_actions(self, actions, use_gear_shift=False):
         """

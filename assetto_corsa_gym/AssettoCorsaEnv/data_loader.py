@@ -43,8 +43,6 @@ class DataLoader():
         self.brake_map = BrakeMap.load(brake_map_file)
         self.steer_max = env.max_steer_deg
 
-        # last valid gear. since shifting goes through neutral
-        self.last_valid_gear = Gear.GEAR_FIRST
 
     def get_actions_from_state(self, state):
         steer = state["steerAngle"] / self.steer_max
@@ -86,18 +84,16 @@ class DataLoader():
         history = self.trajectory[:self.current_step] # get the history seen so far
         current_abs_actions = self.get_actions_from_state(state)
         current_gear = state["actualGear"]
+        # get next gear without out of bounds
+        next_gear = self.trajectory[min(len(self.trajectory) - 1, self.current_step + 1)]["actualGear"]
+        action_gear = self.env.inverse_preprocess_discrete_actions(current_gear, next_gear,
+                                                                   self.trajectory, self.current_step)
 
         if self.current_step == 0:
             self.prev_abs_actions = current_abs_actions
-            self.last_valid_gear = current_gear
 
         actions = self.env.inverse_preprocess_actions(self.prev_abs_actions, current_abs_actions)
         self.prev_abs_actions = current_abs_actions
-
-        action_gear = self.env.inverse_preprocess_discrete_actions(current_gear, self.last_valid_gear)
-
-        if current_gear >= Gear.GEAR_FIRST:  # down/upshifting goes through neutral, filter neutral
-            self.last_valid_gear = current_gear
 
         # abs values or relative
         self.current_actions = np.array([current_abs_actions[0],

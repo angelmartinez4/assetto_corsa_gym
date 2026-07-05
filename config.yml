@@ -19,7 +19,7 @@ action_dim: null  # placeholder
 steps: null # placeholder
 
 Agent:
-  num_steps: 1_000_000
+  num_steps: 2_000_000
   batch_size: 128
   memory_size: 3_000_000
   offline_buffer_size: 1_000_000
