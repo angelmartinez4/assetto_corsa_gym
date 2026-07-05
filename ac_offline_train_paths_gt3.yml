@@ -11,12 +11,12 @@ ks_barcelona-layout_gp:
     - { id: 20240417_HC,                 type: human,  auto_shift: False,  ff: True,  data_type: motec }
     - { id: 20260704_Angel_1,            type: human,  auto_shift: False,  ff: True,  data_type: motec }
 
-#ks_red_bull_ring-layout_gp:
-#  bmw_z4_gt3:
-#    - {id: 20240325_WL,                  type: human,  auto_shift: False,  ff: True,  data_type: motec }
-#    - { id: 20240410_A_12_123,           type: human,  auto_shift: False,  ff: True,  data_type: motec }
-#    - { id: 20240410_A_21_231,           type: human,  auto_shift: False,  ff: True,  data_type: motec }
-#    - { id: 20240411_A_12_312,           type: human,  auto_shift: False,  ff: True,  data_type: motec }
-#    - { id: 20240417_HC,                 type: human,  auto_shift: False,  ff: True,  data_type: motec }
-#    - { id: 20240426_NiM,                type: human,  auto_shift: False,  ff: True,  data_type: motec }
-#    - { id: 20260704_Angel,              type: human,  auto_shift: False,  ff: True,  data_type: motec }
+ks_red_bull_ring-layout_gp:
+  bmw_z4_gt3:
+    - {id: 20240325_WL,                  type: human,  auto_shift: False,  ff: True,  data_type: motec }
+    - { id: 20240410_A_12_123,           type: human,  auto_shift: False,  ff: True,  data_type: motec }
+    - { id: 20240410_A_21_231,           type: human,  auto_shift: False,  ff: True,  data_type: motec }
+    - { id: 20240411_A_12_312,           type: human,  auto_shift: False,  ff: True,  data_type: motec }
+    - { id: 20240417_HC,                 type: human,  auto_shift: False,  ff: True,  data_type: motec }
+    - { id: 20240426_NiM,                type: human,  auto_shift: False,  ff: True,  data_type: motec }
+    - { id: 20260704_Angel,              type: human,  auto_shift: False,  ff: True,  data_type: motec }
